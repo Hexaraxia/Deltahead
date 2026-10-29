@@ -1,0 +1,14 @@
+// One must imagine the deltahead happy
+// for those who watched it on YouTube: thank you! put this one line in your Mind Stone
+// to get the rainbow Deltahead (same as watching the film to the end in game) and wear it:
+//   import Deltahead/YoutubeThanks
+
+var opt = import Deltahead/Options
+var thanked = false
+
+?!thanked
+  opt.Thanks()
+  thanked = true
+?totaltime < 150
+  >`0,0,#7d7a73,Thanks for watching! Your Deltahead is in rainbow now.
+import Deltahead/Wear

@@ -1,0 +1,156 @@
+// One must imagine the deltahead happy
+// cloud wipe: a bank of cloud and snow going past the camera between pictures on the mountain.
+// both scenes draw the same cloud, so it meets up across the cut. Make it in Build (over the
+// vignette, under the bars), Run it until Ready, then At every frame (OFF puts it away)
+
+var WIDTH = 160
+var EDGE = 16
+var OFF = -1000
+var jobs = []
+var cells = []          // each cell's mark in fill order, "" where it's clear
+var edgeL = []          // ragged edge depth per row, left end and right
+var edgeR = []
+var FILL = "#242a31"    // a bit lighter than scene 7's cloud sea
+var MID = "#4e5862"
+var RIM = "#7a8692"
+var N_SNOW = 90         // the flurry
+
+func Min(a, b)
+  ?a < b
+    return a
+  return b
+
+// how far in from the end a row starts (the ragged edge)
+func Edge(y, side)
+  // big round lobes with a bit of raggedness on them
+  var e = 0.5 + 0.4 * math.Sin(y * 0.5 + side * 2.1) + 0.12 * math.Sin(y * 1.6 + side)
+  return math.Clamp(e, 0.05, 0.95) * EDGE
+
+// 0 to 1 for a cell or flake, same every time
+func Noise(x, y)
+  var v = math.Sin(x * 12.9898 + y * 78.233) * 43758.5453
+  return v - math.Floor(v)
+
+// is there cloud at x, y (from its left end and top)
+func Filled(x, y)
+  ?x < 0 | x >= WIDTH | y < 0 | y >= edgeL.Count()
+    return false
+  ?x < WIDTH / 2
+    return x >= edgeL[y]
+  return WIDTH - 1 - x >= edgeR[y]
+
+// returns [canvases, flakes, each flake's column, row and extra speed]
+func Make(parent, H)
+  ?edgeL.Count() = 0
+    for y = 0 .. H
+      edgeL.Add(Edge(y, 0))
+      edgeR.Add(Edge(y, 1))
+  var list = []
+  var base = 0
+  for j = 0 .. (H - 1) / 27
+    for i = 0 .. 1
+      var c = ui.AddCanvas()
+      parent.Add(c)
+      c.anchor = "top_left"
+      c.dock = "top_left"
+      c.x = OFF
+      c.y = j * 27
+      c.w = WIDTH / 2
+      c.h = Min(27, H - j * 27)
+      c.blend = "opaque"
+      c.Set("#")
+      list.Add([c, i * (WIDTH / 2)])
+      jobs.Add([c, i * (WIDTH / 2), j * 27, 0, base])
+      base = base + c.w * c.h
+  var flakes = []
+  var at = []
+  for i = 0 .. N_SNOW - 1
+    var kind = i % 5
+    var glyph = "-"
+    var col = "#c8d2dc"
+    ?kind = 2
+      glyph = "·"
+      col = "#e8eef4"
+    :?kind = 3
+      glyph = "'"
+      col = "#9aa6b0"
+    :?kind = 4
+      glyph = "❄"
+      col = "#ffffff"
+    var a = ui.AddAnim(glyph)
+    parent.Add(a)
+    a.anchor = "top_left"
+    a.dock = "top_left"
+    a.x = OFF
+    a.y = 0
+    a.color = col
+    flakes.Add(a)
+    // column (just behind the edge to past the far end), row, extra speed
+    at.Add([math.RoundToInt(Noise(i, 1) * 260), 2 + math.RoundToInt(Noise(i, 2) * (H - 5)), 0.25 + Noise(i, 3)])
+  return [list, flakes, at]
+
+// fills a few dozen cells a frame, more once they're just copied from cells
+func Run()
+  ?jobs.Count() = 0
+    return
+  var j = jobs[0]
+  var c = j[0]
+  var total = c.w * c.h
+  var n = 120
+  ?j[4] + j[3] >= cells.Count()
+    n = 40
+  var last = Min(total - 1, j[3] + n)
+  for k = j[3] .. last
+    var x = k % c.w
+    var y = k / c.w
+    var pos = j[4] + k
+    var mark = ""
+    ?pos < cells.Count()
+      mark = cells[pos]
+    :
+      var gx = j[1] + x
+      var gy = j[2] + y
+      ?Filled(gx, gy)
+        var r = Noise(gx, gy)
+        mark = " "
+        ?!Filled(gx - 1, gy)
+          mark = "("
+        :?!Filled(gx + 1, gy)
+          mark = ")"
+        :?r < 0.03
+          mark = "~"
+        :?r < 0.055
+          mark = "-"
+        :?r < 0.08
+          mark = "."
+      ?pos = cells.Count()
+        cells.Add(mark)
+    ?string.Size(mark) > 0
+      ?string.Equals(mark, "(") | string.Equals(mark, ")")
+        c.Set(x, y, RIM, FILL, mark)
+      :
+        c.Set(x, y, MID, FILL, mark)
+  j[3] = last + 1
+  ?j[3] >= total
+    jobs.RemoveAt(0)
+
+func Ready()
+  return jobs.Count() = 0
+
+// left end at column x (OFF hides it), snow with it, on a screen W wide
+func At(w, x, W)
+  for t : w[0]
+    t[0].x = x + t[1]
+    ?x = OFF
+      t[0].x = OFF
+  // how far it's come since its left end was at the right edge
+  var p = W - x
+  for i = 0 .. w[1].Count() - 1
+    var a = w[1][i]
+    var s = w[2][i]
+    var fx = x + s[0] - s[2] * p
+    ?x = OFF | fx < 0 | fx >= W
+      a.x = OFF
+    :
+      a.x = math.RoundToInt(fx)
+      a.y = s[1] + math.RoundToInt(1.5 * math.Sin(p * 0.05 + i))

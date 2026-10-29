@@ -1,0 +1,18 @@
+// preview only (not in the package): plays scene 14 into scene 15 like Main does, to check the hand-over
+// and the music's second hit. render from near the end of 14. the simulator runs it instead of Main
+
+var film14 = new Deltahead/Scene14
+var film15 = new Deltahead/Scene15
+var part = 14
+
+?string.Equals(loc.id, "waterfall")
+  ?part = 14
+    film14.Update()
+    ?film14.f >= 900
+      film15.Warm()
+    ?film14.over
+      film14.Detach()
+      part = 15
+      film15.Update()
+  :
+    film15.Update()

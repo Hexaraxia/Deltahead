@@ -1,0 +1,2 @@
+# keep every file byte for byte (the game reads the scripts and art as they are)
+* -text

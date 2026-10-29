@@ -1,0 +1,301 @@
+// One must imagine the deltahead happy
+// Before the film: a rainbow ∆ at the waterfall, then a fade to black and an
+// options box that opens and closes like the game's Settings.
+// Main calls Update every frame. once black it holds (HOLD) till Main sets go,
+// so Main can do its heavy work where a stall can't be seen
+
+var opt = import Deltahead/Options
+
+var WAIT = 0             // the ∆ at the waterfall
+var FADING = 1
+var HOLD = 2             // black, till Main says go
+var OPENING = 3
+var OPEN = 4
+var CLOSING = 5
+var DONE = 6
+var stage = 0
+var go = false
+var built = false
+var t = 0                // frames in this stage
+
+// the Settings box (48x15), its size on each frame of growing and shrinking
+var BOX_W = 48
+var BOX_H = 15
+var OPEN_W = [7, 14, 21, 28, 36, 43, 48]
+var OPEN_H = [2, 4, 6, 9, 11, 13, 15]
+var CLOSE_W = [40, 33, 26, 19, 12, 4]
+var CLOSE_H = [12, 10, 8, 6, 3, 1]
+var BORDER = "#565656"
+var LABEL = "#a9a9a9"
+var TRACK = "#2e2e2e"
+var KNOB_ON = "#ffffff"
+var FADE_T = 30
+var KNOB_T = 8           // knob slide, 5 steps in a quarter second like the game's
+var INK = "#e7e3da"
+
+// the waterfall ∆, solid inside so its words read over the game
+var DELTA = ascii
+#########.##########
+########/ \#########
+#######/   \########
+######/     \#######
+#####/       \######
+####/         \#####
+###/           \####
+##/             \###
+#/               \##
+/_________________\#
+asciiend
+
+// the game's switch: its track, and the knob at each of its five steps
+var TRACK_ART = ascii
+,-------.
+'-------'
+asciiend
+var KNOB_ART = ascii
+┌───╖
+└───╜
+%%
+#┌───╖
+#└───╜
+%%
+##┌───┐
+##└───┘
+%%
+###╓───┐
+###╙───┘
+%%
+####╓───┐
+####╙───┘
+asciiend
+
+// selected tab on the box's top edge, its bottom row opens the border under it
+var TAB_ART = ascii
+┌───────────┐
+│###########│
+┘           └
+asciiend
+
+var invis = 0
+var tiles = []
+var deltaArt = null
+var deltaWords = []
+var deltaBtn = null
+var deltaPressed = false
+var box = null
+var tab = null
+var tabLabel = null
+var labels = []
+var tracks = []
+var knobs = []
+var hits = []
+var knobAt = []          // when each switch was last flipped
+var startBtn = null
+var startPressed = false
+var W = 0
+var H = 0
+var OFF = -1000
+
+func Place(c, x, y)
+  c.anchor = "top_left"
+  c.dock = "top_left"
+  c.x = x
+  c.y = y
+
+func MakeAnim(s, col, x, y)
+  var a = ui.AddAnim(s)
+  Place(a, x, y)
+  a.color = col
+  a.visible = false
+  return a
+
+// invisible button over drawn art, made after it so a press flips the cells under it like the game's
+func MakeHit(x, y, w, h, hcol, sfx)
+  var b = ui.AddButton()
+  Place(b, x, y)
+  b.w = w
+  b.h = h
+  b.style = invis
+  b.text = ""
+  b.hcolor = hcol
+  b.sound = sfx
+  b.visible = false
+  return b
+
+func Build()
+  built = true
+  W = screen.w
+  H = screen.h
+  invis = ui.AddStyle("#########")
+  // the black: multiply tiles over everything (canvases max out at 100x27), no width till needed
+  var y = 0
+  ?H > 0
+    for ty = 0 .. (H - 1) / 27
+      for tx = 0 .. (W - 1) / 100
+        var c = ui.AddCanvas()
+        Place(c, OFF, ty * 27)
+        c.w = 0
+        c.h = IMin(27, H - ty * 27)
+        c.blend = "multiply"
+        c.SetFG("#ffffff")
+        c.SetBG("#ffffff")
+        tiles.Add(c)
+  // the ∆, a little above him
+  var dx = W / 2 - 10
+  var dy = H / 2 - 11
+  deltaArt = MakeAnim(DELTA, "#rainFF", dx, dy)
+  deltaWords.Add(MakeAnim("Continue to", INK, dx + 4, dy + 7))
+  deltaWords.Add(MakeAnim("Animation", INK, dx + 5, dy + 8))
+  deltaBtn = MakeHit(dx, dy, 20, 10, "#404040", "confirm")
+  deltaBtn.SetPressed(OnDelta)
+  // the box, its tab, and each switch with its label
+  box = ui.AddPanel()
+  box.anchor = "center_center"
+  box.dock = "center_center"
+  box.x = 0
+  box.y = -2
+  box.style = 1
+  box.color = BORDER
+  box.visible = false
+  var bx = W / 2 - 24
+  var by = H / 2 - 9
+  tab = MakeAnim(TAB_ART, BORDER, bx + 2, by - 2)
+  tabLabel = MakeAnim("Animation", LABEL, bx + 4, by - 1)
+  var names = ["Screen Flashes", "Camera Shake"]
+  for i = 0 .. 1
+    var ly = by + 2 + i * 4
+    labels.Add(MakeAnim(names[i], LABEL, W / 2 - string.Size(names[i]) / 2, ly))
+    tracks.Add(MakeAnim(TRACK_ART, TRACK, W / 2 - 4, ly + 1))
+    knobs.Add(MakeAnim(KNOB_ART, KNOB_ON, W / 2 - 4, ly + 1))
+    knobAt.Add(-100)
+  // switch buttons are a cell bigger all round, like the game's
+  hits.Add(MakeHit(W / 2 - 5, by + 2, 11, 4, "#ffffff", "click"))
+  hits.Add(MakeHit(W / 2 - 5, by + 6, 11, 4, "#ffffff", "click"))
+  hits[0].SetPressed(OnFlashes)
+  hits[1].SetPressed(OnShake)
+  startBtn = ui.AddButton()
+  Place(startBtn, W / 2 - 10, by + 10)
+  startBtn.w = 21
+  startBtn.h = 3
+  startBtn.text = "Start Animation"
+  startBtn.tcolor = LABEL
+  startBtn.bcolor = BORDER
+  startBtn.hcolor = "#ffffff"
+  startBtn.sound = "confirm"
+  startBtn.visible = false
+  startBtn.SetPressed(OnStart)
+
+func IMin(a, b)
+  ?a < b
+    return a
+  return b
+
+func OnDelta()
+  deltaPressed = true
+
+func OnFlashes()
+  opt.flashes = !opt.flashes
+  knobAt[0] = totaltime
+
+func OnShake()
+  opt.shake = !opt.shake
+  knobAt[1] = totaltime
+
+func OnStart()
+  startPressed = true
+
+func Go(s)
+  stage = s
+  t = 0
+
+func Black(k)
+  var c = color.Lerp("#ffffff", "#000000", k)
+  for tl : tiles
+    tl.x = (tiles.IndexOf(tl) % ((W - 1) / 100 + 1)) * 100
+    tl.w = IMin(100, W - tl.x)
+    tl.SetFG(c)
+    tl.SetBG(c)
+
+// only shown while the box is full size
+func Contents(on)
+  tab.visible = on
+  tabLabel.visible = on
+  startBtn.visible = on
+  for i = 0 .. 1
+    labels[i].visible = on
+    tracks[i].visible = on
+    knobs[i].visible = on
+    hits[i].visible = on
+    ?on
+      // slide the knob over, right and white for on
+      var v = opt.flashes
+      ?i = 1
+        v = opt.shake
+      var k = IMin(4, (totaltime - knobAt[i]) * 5 / KNOB_T)
+      var at = k
+      ?!v
+        at = 4 - k
+      knobs[i].frame = at
+      knobs[i].color = BORDER
+      ?v
+        knobs[i].color = KNOB_ON
+
+func Update()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+    opt.Load()
+  t++
+  var waiting = stage = WAIT
+  deltaArt.visible = waiting
+  deltaBtn.visible = waiting
+  for w : deltaWords
+    w.visible = waiting
+  ?stage = WAIT
+    ?deltaPressed
+      deltaPressed = false
+      Go(FADING)
+      disable hud
+      storage.Set("hidHud", true)
+  :?stage = FADING
+    Black(math.Clamp(t * 1.0 / FADE_T, 0.0, 1.0))
+    ?t >= FADE_T
+      disable player
+      disable banner
+      Go(HOLD)
+  :?stage = HOLD
+    ?go
+      Go(OPENING)
+  :?stage = OPENING
+    box.visible = true
+    box.w = OPEN_W[t - 1]
+    box.h = OPEN_H[t - 1]
+    ?t >= OPEN_W.Count()
+      Go(OPEN)
+  :?stage = OPEN
+    Contents(true)
+    ?startPressed
+      startPressed = false
+      opt.Save()
+      Contents(false)
+      Go(CLOSING)
+  :?stage = CLOSING
+    ?t <= CLOSE_W.Count()
+      box.w = CLOSE_W[t - 1]
+      box.h = CLOSE_H[t - 1]
+    :
+      box.visible = false
+      Go(DONE)
+
+// hide everything, the black too (the film has its own)
+func Off()
+  for tl : tiles
+    tl.x = OFF
+    tl.w = 0
+  box.visible = false
+  Contents(false)
+  deltaArt.visible = false
+  deltaBtn.visible = false
+  for w : deltaWords
+    w.visible = false

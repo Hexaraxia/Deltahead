@@ -1,0 +1,26 @@
+// One must imagine the deltahead happy
+// The Deltahead, to wear: a ∆ in place of your head (a big one if you have the
+// Big Head on). white at first, rainbow once you've watched the film at the
+// Deadwood waterfall to the end. put this line in your Mind Stone:
+//   import Deltahead/Wear
+//
+// drawn on the Big Head's layer (>h) so it follows his head and is gone when he is
+
+var opt = import Deltahead/Options
+var col = "#ffffff"
+
+col = "#ffffff"
+?opt.Unlocked()
+  col = "#rainFF"
+// not while the film's on
+?!opt.filmOn
+  ?bighead
+    >h-2,-1,@col@,ascii
+# . #
+ / \ 
+/___\
+asciiend
+  :
+    >h0,1,@col@,∆
+?!opt.Unlocked() & totaltime < 300
+  >`0,0,#7d7a73,Deltahead: watch the film at the Deadwood waterfall to the end to make it rainbow.

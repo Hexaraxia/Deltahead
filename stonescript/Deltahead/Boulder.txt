@@ -1,0 +1,160 @@
+// One must imagine the deltahead happy
+// The Boulder, a secret pet: watch the film at the Deadwood waterfall a second
+// time to find it. it rolls along behind you, colored by the stage's difficulty
+// (white, cyan, yellow, green, like the game's stars). put this in your Mind Stone:
+//   import Deltahead/Boulder
+// to pick its color yourself (any #rrggbb, or #rainFF for rainbow), add these two under it:
+//   var boulder = import Deltahead/Boulder
+//   boulder.color = "#ff8800"
+//
+// drawn with >o as part of the hero
+
+var opt = import Deltahead/Options
+var color = ""           // "" = the stage's color
+var bx = 0.0             // world x
+var roll = 0.0           // how far it's rolled, turns its markings
+var placed = false
+var lastLoc = ""
+var target = 0.0
+var step = 0.0
+var k = 0
+var ox = 0
+var c = ""
+var d = ""               // its shaded side
+
+// stage difficulty, in the game's star colors
+func Tier()
+  ?loc.stars >= 16
+    return "#32da5a"
+  :?loc.stars >= 11
+    return "#ffff62"
+  :?loc.stars >= 6
+    return "#7fe3de"
+  return "#ffffff"
+
+?opt.BoulderUnlocked() & !opt.filmOn
+  // trails a few cells behind, jumps straight there in a new place or if he's far off
+  target = pos.x - player.direction * 7
+  ?!placed | !string.Equals(loc.id, lastLoc) | math.Abs(target - bx) > 40
+    bx = target
+    placed = true
+    lastLoc = loc.id
+  step = (target - bx) * 0.15
+  bx = bx + step
+  roll = roll + step
+  k = math.FloorToInt(roll) % 8
+  ?k < 0
+    k = k + 8
+  c = color
+  ?string.Equals(c, "")
+    c = Tier()
+  // shaded side is down and right. rainbow can't be darkened
+  d = c
+  ?string.IndexOf(c, "#rain") ! 0
+    d = color.Lerp("#000000", c, 0.6)
+  ox = math.RoundToInt(bx - pos.x) - 3
+  // face ticks turn an eighth per cell rolled, clockwise when rolling right
+  ?k = 0
+    >o@ox@,0,@c@,ascii
+#.-¯-.
+/    #\
+\´ ###/
+#`-_-´
+asciiend
+    >o@ox@,0,@d@,ascii
+#######
+#####´
+###.::
+#
+asciiend
+  :?k = 1
+    >o@ox@,0,@c@,ascii
+#.-¯-.
+/,   #\
+\  ###/
+#`-_-´
+asciiend
+    >o@ox@,0,@d@,ascii
+#######
+#####,
+###.::
+#
+asciiend
+  :?k = 2
+    >o@ox@,0,@c@,ascii
+#.-¯-.
+/    #\
+\, ###/
+#`-_-´
+asciiend
+    >o@ox@,0,@d@,ascii
+#######
+#####:
+###.:,
+#
+asciiend
+  :?k = 3
+    >o@ox@,0,@c@,ascii
+#.-¯-.
+/   ´#\
+\  ###/
+#`-_-´
+asciiend
+    >o@ox@,0,@d@,ascii
+#######
+#####:
+###.:,
+#
+asciiend
+  :?k = 4
+    >o@ox@,0,@c@,ascii
+#.-¯-.
+/    #\
+\, ###/
+#`-_-´
+asciiend
+    >o@ox@,0,@d@,ascii
+#######
+#####,
+###.::
+#
+asciiend
+  :?k = 5
+    >o@ox@,0,@c@,ascii
+#.-¯-.
+/    #\
+\´ ###/
+#`-_-´
+asciiend
+    >o@ox@,0,@d@,ascii
+#######
+#####:
+###.:,
+#
+asciiend
+  :?k = 6
+    >o@ox@,0,@c@,ascii
+#.-¯-.
+/´   #\
+\  ###/
+#`-_-´
+asciiend
+    >o@ox@,0,@d@,ascii
+#######
+#####´
+###.::
+#
+asciiend
+  :?k = 7
+    >o@ox@,0,@c@,ascii
+#.-¯-.
+/´   #\
+\ ,###/
+#`-_-´
+asciiend
+    >o@ox@,0,@d@,ascii
+#######
+#####:
+###.::
+#
+asciiend

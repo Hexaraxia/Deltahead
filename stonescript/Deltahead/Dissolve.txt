@@ -1,0 +1,186 @@
+// One must imagine the deltahead happy
+// the Ki dissolve between scenes, like the title: the picture breaks into motes that rise
+// away, then the next one forms as motes land in it. the scene before draws the first half,
+// the scene after the second, on one clock (T: -OUT_T to IN_T) so the motes carry over the cut
+
+var OUT_T = 45          // the first half
+var IN_T = 60           // the second
+var LIFE = 34           // a mote rising away off the picture
+var FLY = 26            // a mote rising into its place
+var EVERY = 22          // one cell in this many sends a mote up, or has one land in it
+var KI = "#bcd0ec"      // the title's Ki
+var OFF = -1000
+// the cells (y * W + x) in the order they come apart and the order they form, for a picture this size
+var orders = []
+var orderW = 0
+var orderH = 0
+var job = []            // [which order, how far, its random number]
+
+func Min(a, b)
+  ?a < b
+    return a
+  return b
+
+// canvases over the whole picture (a canvas is at most 100 x 27)
+func Tiles(parent, W, H)
+  var list = []
+  for j = 0 .. (H - 1) / 27
+    for i = 0 .. (W - 1) / 100
+      var c = ui.AddCanvas()
+      parent.Add(c)
+      c.anchor = "top_left"
+      c.dock = "top_left"
+      c.x = OFF
+      c.y = j * 27
+      c.w = Min(100, W - i * 100)
+      c.h = Min(27, H - j * 27)
+      c.blend = "opaque"
+      c.SetFG("#000000")
+      c.SetBG("#000000")
+      c.Set("#")
+      // no width till it's drawn, the game draws every canvas wherever it is (what's in it stays)
+      c.w = 0
+      list.Add(c)
+  return list
+
+// second: whether it's the scene after's half (its picture starts hidden)
+func Make(parent, W, H, second)
+  var veil = Tiles(parent, W, H)
+  var motes = Tiles(parent, W, H)
+  ?second
+    for c : veil
+      c.Set(" ")
+  ?orderW ! W | orderH ! H
+    orderW = W
+    orderH = H
+    orders = [[], []]
+    job = [0, 0, 7919]
+  // [the veil, the motes, which half, how many cells it's done, W, H]
+  return [veil, motes, second, 0, W, H]
+
+func Ready()
+  return job.Count() = 0
+
+// shuffles the cells into the two orders a few hundred a frame, call it every frame while the
+// scene warms up. same shuffle every time (it has its own random numbers)
+func Run()
+  ?job.Count() = 0
+    return
+  var N = orderW * orderH
+  var o = orders[job[0]]
+  ?o.Count() < N
+    for i = o.Count() .. Min(N, o.Count() + 400) - 1
+      o.Add(i)
+    return
+  var i = N - 1 - job[1]
+  var r = job[2]
+  for k = 0 .. 300
+    ?i < 1
+      break
+    r = (r * 75 + 74) % 65537
+    var j = r % (i + 1)
+    var t = o[i]
+    o[i] = o[j]
+    o[j] = t
+    i = i - 1
+  job[2] = r
+  job[1] = N - 1 - i
+  ?i < 1
+    ?job[0] = 0
+      job = [1, 0, 104729 % 65537]
+    :
+      job = []
+
+func Off(s)
+  for c : s[0]
+    c.x = OFF
+    c.w = 0
+  for c : s[1]
+    c.x = OFF
+    c.w = 0
+
+func Home(list, W)
+  var cols = (W - 1) / 100 + 1
+  for k = 0 .. list.Count() - 1
+    var c = list[k]
+    c.x = (k % cols) * 100
+    c.w = Min(100, W - (k % cols) * 100)
+
+func Put(s, x, y, g, col)
+  var cx = math.RoundToInt(x)
+  var cy = math.RoundToInt(y)
+  ?cx >= 0 & cx < s[4] & cy >= 0 & cy < s[5]
+    var tiles = s[1]
+    var c = tiles[(cy / 27) * ((s[4] - 1) / 100 + 1) + cx / 100]
+    c.Set(cx % 100, cy % 27, g)
+    c.SetFG(cx % 100, cy % 27, col)
+
+// the veil over cell n (y * W + x): hiding it, or showing it again
+func Veil(s, n, g)
+  var x = n % s[4]
+  var y = n / s[4]
+  var tiles = s[0]
+  var c = tiles[(y / 27) * ((s[4] - 1) / 100 + 1) + x / 100]
+  c.Set(x % 100, y % 27, g)
+
+func At(s, T)
+  ?!Ready()
+    return
+  var W = s[4]
+  var H = s[5]
+  var N = W * H
+  Home(s[0], W)
+  Home(s[1], W)
+  // the picture: coming apart, or forming
+  ?!s[2]
+    var u = math.Clamp((T + OUT_T) * 1.0 / OUT_T, 0.0, 1.0)
+    var target = Min(N, math.RoundToInt(N * u * u))
+    var o = orders[0]
+    ?s[3] < target
+      for k = s[3] .. target - 1
+        Veil(s, o[k], " ")
+      s[3] = target
+  :
+    var u = math.Clamp(T * 1.0 / IN_T, 0.0, 1.0)
+    var target = Min(N, math.RoundToInt(N * (1.0 - (1.0 - u) * (1.0 - u))))
+    var o = orders[1]
+    ?s[3] < target
+      for k = s[3] .. target - 1
+        Veil(s, o[k], "#")
+      s[3] = target
+  for c : s[1]
+    c.Set("#")
+  var m = N / EVERY
+  // rising away as it comes apart: mote j left its cell when the picture got there
+  var to = T + OUT_T
+  var lo = 0
+  ?to > LIFE
+    lo = math.CeilToInt(m * ((to - LIFE) * 1.0 / OUT_T) * ((to - LIFE) * 1.0 / OUT_T))
+  var r = math.Clamp(to * 1.0 / OUT_T, 0.0, 1.0)
+  var hi = Min(m - 1, math.FloorToInt(m * r * r))
+  ?to >= 0 & lo <= hi
+    for j = lo .. hi
+      var n = orders[0][j * EVERY]
+      var q = (to - OUT_T * math.Sqrt(j * 1.0 / m)) / LIFE
+      ?q >= 0 & q < 1
+        var cy = n / W
+        Put(s, n % W + math.Sin(q * 5 + j) * 1.2, cy - q * q * (cy + 4), "·", color.Lerp(KI, "#000000", q))
+  // rising up into their places: mote j lands when the new picture reaches its cell
+  var a0 = math.Clamp(T * 1.0 / IN_T, 0.0, 1.0)
+  var a1 = math.Clamp((T + FLY) * 1.0 / IN_T, 0.0, 1.0)
+  lo = math.FloorToInt(m * (1.0 - (1.0 - a0) * (1.0 - a0)))
+  hi = Min(m - 1, math.FloorToInt(m * (1.0 - (1.0 - a1) * (1.0 - a1))))
+  ?T + FLY > 0 & lo <= hi
+    for j = lo .. hi
+      var n = orders[1][j * EVERY]
+      var land = IN_T * (1.0 - math.Sqrt(1.0 - j * 1.0 / m))
+      var p = 1.0 - (land - T) / FLY
+      ?p >= 0 & p < 1
+        var tx = n % W
+        var ty = n / W
+        var sx = tx + (j * 7) % 9 - 4
+        var k = 1.0 - (1.0 - p) * (1.0 - p)
+        var g = "·"
+        ?(j + T / 4) % 3 = 0
+          g = "."
+        Put(s, sx + (tx - sx) * p + math.Sin(p * 6 + j) * (1 - p) * 1.5, H - 1 + (ty - H + 1) * k, g, KI)

@@ -1,0 +1,963 @@
+// One must imagine the deltahead happy
+// Scene 3: The World Fountain
+//
+// he falls past the World Fountain into the pool at its foot, gets up and
+// follows the Ki to a chimney in the wall, then climbs it ledge by ledge.
+// everything runs off one frame counter, 30 a second
+
+var spr2 = import Deltahead/Art2Sprites
+var world = import Deltahead/Art3Fountain
+// place name and stars, like the game's
+var banner = new Deltahead/Banner
+var spr = import Deltahead/Art3Sprites
+var look = import Deltahead/Look
+
+// timing, in frames
+var T_CARD1 = 30        // the first card fades in over the dark
+var T_CARD2 = 75
+var T_CARDS_OUT = 160
+var T_DROP = 205        // he falls in from above
+var T_LAND = 0          // he hits the water (set in Build, from how he falls)
+var T_WADE = 0          // he follows the mote
+var T_EDGE = 0          // at the pool's edge
+var T_SHORE = 0         // up out of it, on his feet
+var T_CLEFT = 0         // at the foot of the chimney
+var T_CLIMB = 0         // up it
+var T_END = 0
+
+// pace, in cells per frame, and the climb, in frames per ledge
+var WADE_V = 0.28
+var WALK_V = 0.36
+var CLIMB_T = 68        // he's no climber: every ledge is hard work
+var SLIP_K = 1          // the ledge where his grip goes the first time
+var SLIP_T = 20
+var N_SLOW = 3          // ledges he has to fight for
+var FAST_T = 44         // then quicker ones, once he's found a rhythm
+var N_FAST = 4          // the last one's at the top of the picture
+var START_X = 133       // his head's column at the foot of the chimney
+var SHORE_X = 0         // where he comes out of the pool (set in Build)
+var OUT_T = 50          // hauling himself out
+
+var f = 0
+var built = false
+var over = false
+var attached = false
+var parked = false
+var parkable = []       // its canvases, given no width while it waits (Park)
+var parkW = []
+var W = 0
+var H = 0
+var cx = 0
+var cy = 0
+var camX = 0
+var camY = 0
+var camYf = 0.0
+var camXf = 0.0         // exact camera x, for parallax
+var CAM_FLOOR = 0       // camera height once he's down, floor 7 rows below the middle
+var CAM_TOP = 30        // as high as it follows him up the chimney
+var feetNow = 0
+var GRADE = "#d6dee8"     // the deep's own light: pale, a little cold
+var glowX = 0.0         // where he is, for the light that follows him
+var himX = 0            // and the box he's drawn in, for the Ki to pass behind him
+var himY = 0
+var himW = 0
+var glowY = 0.0
+var shadeCol = ""
+var invis = ui.AddStyle("#########")
+var OFF = -1000
+
+var root = null
+var backdrop = []
+var shade = []
+var bars = []
+var card1 = null
+var card2 = null
+var pFar = null
+var pMidL = null
+var pMidR = null
+var pPool = null
+var pFront = null
+var surges = []
+var glints = []
+var heroR = null
+var heroL = null
+var climbR = null
+var climbL = null
+var ripples = []
+var rings = []
+var wakes = []
+var splash = null
+var drops = []
+var poolMotes = []
+var lead = null
+var motes = []
+var cleftMotes = []
+var glowLow = null
+var glowHigh = null
+var poolGlow = null
+var tipGlow = null
+var surgeGlow = null
+var cleftGlow = []
+var splashGlow = null
+var leadGlow = null
+var deepGlow = null
+var himGlow = null
+var shimmers = []
+var vig = []
+var allLights = []
+var lightW = []          // each light's width (it has none while it's off)
+var jobs = []
+
+// drifting Ki: far, middle, near (parallax, rise speed, color)
+var MOTE_N = 24
+var DEPTH_K = [0.6, 0.85, 1.0]
+var DEPTH_V = [0.06, 0.11, 0.17]
+var DEPTH_C = ["#6f7b88", "#aab7c5", "#f2f7ff"]
+var SURGE_X = [46, 53, 50]
+
+
+// ---------------------------------------------------------------- building
+
+func Place(c, x, y)
+  c.anchor = "top_left"
+  c.dock = "top_left"
+  c.x = x
+  c.y = y
+
+func MakeAnim(layers, x, y)
+  var a = ui.AddAnim(layers[0][1])
+  root.Add(a)
+  Place(a, x, y)
+  a.color = layers[0][0]
+  ?layers.Count() > 1
+    for i = 1 .. layers.Count() - 1
+      var l = a.AddLayer(layers[i][1])
+      l.color = layers[i][0]
+  return a
+
+func MakeCanvas(x, y, w, h, blend)
+  var c = ui.AddCanvas()
+  parkable.Add(c)
+  root.Add(c)
+  Place(c, x, y)
+  c.w = w
+  c.h = h
+  c.blend = blend
+  c.SetFG("#000000")
+  c.SetBG("#000000")
+  return c
+
+// canvases max out at 100x27, so screen-sized ones are tiled
+func Tiles(blend, y0, rows)
+  var list = []
+  for j = 0 .. (rows - 1) / 27
+    for i = 0 .. (W - 1) / 100
+      var c = MakeCanvas(i * 100, y0 + j * 27, IMin(100, W - i * 100), IMin(27, rows - j * 27), blend)
+      list.Add(c)
+  return list
+
+func Solid(list)
+  for c : list
+    c.Set(" ")
+
+func MakeText(s)
+  var t = ui.AddText(s)
+  root.Add(t)
+  t.anchor = "center_center"
+  t.dock = "center_center"
+  t.x = 0
+  t.y = 0
+  t.w = string.Size(s) + 2
+  t.h = 1
+  t.align = "center"
+  t.color = "#000000"
+  return t
+
+// a light: additive canvas fading out from the center, filled a few hundred cells a frame.
+// canvases get drawn even when hidden, so a light that's off waits off screen (see Light)
+func QueueHalo(w, h, r, g, b, bgk)
+  var c = MakeCanvas(OFF, 0, w, h, "add")
+  jobs.Add([c, w, h, r, g, b, bgk, 0])
+  allLights.Add(c)
+  lightW.Add(w)
+  c.w = 0
+  return c
+
+func RunJobs()
+  look.Run()
+  ?jobs.Count() = 0
+    return
+  var j = jobs[0]
+  var total = j[1] * j[2]
+  var last = IMin(total - 1, j[7] + 150)
+  var hx = (j[1] - 1) / 2.0
+  var hy = (j[2] - 1) / 2.0
+  for i = j[7] .. last
+    var x = i % j[1]
+    var y = i / j[1]
+    var dx = (x - hx) / (hx + 0.5)
+    var dy = (y - hy) / (hy + 0.5)
+    var k = 1.0 - math.Sqrt(dx * dx + dy * dy)
+    ?k > 0
+      k = k * k
+      j[0].SetFG(x, y, color.FromRGB(math.RoundToInt(j[3] * k), math.RoundToInt(j[4] * k), math.RoundToInt(j[5] * k)))
+      j[0].SetBG(x, y, color.FromRGB(math.RoundToInt(j[3] * k * j[6]), math.RoundToInt(j[4] * k * j[6]), math.RoundToInt(j[5] * k * j[6])))
+  j[7] = last + 1
+  ?j[7] >= total
+    jobs.RemoveAt(0)
+
+func Build()
+  built = true
+  W = screen.w
+  H = screen.h
+  cx = W / 2
+  cy = H / 2
+  CAM_FLOOR = world.floor - (cy + 7)
+  T_LAND = T_DROP + 43 + math.CeilToInt((world.floor - 25.735) / 1.29)
+  T_WADE = T_LAND + 140
+  SHORE_X = world.poolX1 + 1
+  T_EDGE = T_WADE + math.CeilToInt((SHORE_X - 3 - world.landX) / WADE_V)
+  T_SHORE = T_EDGE + OUT_T
+  T_CLEFT = T_SHORE + math.CeilToInt((START_X - SHORE_X - 1) / WALK_V)
+  T_CLIMB = T_CLEFT + 26
+  // he's out of the top of the picture a few frames into the ledge after the last
+  T_END = T_CLIMB + N_SLOW * CLIMB_T + SLIP_T + N_FAST * FAST_T + 12
+  disable hud
+  disable player
+  disable banner
+  storage.Set("hidHud", true)
+
+  root = ui.AddPanel()
+  root.style = invis
+  root.anchor = "top_left"
+  root.dock = "top_left"
+  root.x = 0
+  root.y = 0
+  root.w = W
+  root.h = H
+  attached = true
+
+  // back to front: shaft, cavern and crystal, glints, him, the pool's near water, rings,
+  // the Ki, near rock, then lights, shade, bars and words
+  backdrop = Tiles("opaque", 0, H)
+  Solid(backdrop)
+  pFar = MakeAnim(world.far, 0, 0)
+  pMidL = MakeAnim(world.midL, 0, 0)
+  pMidR = MakeAnim(world.midR, 0, 0)
+  for i = 0 .. 2
+    surges.Add(MakeAnim(spr.surge, 0, 0))
+  for i = 0 .. world.glintX.Count() - 1
+    glints.Add(MakeAnim(spr2.glint, 0, 0))
+  heroR = MakeAnim(spr2.heroR, 0, 0)
+  heroL = MakeAnim(spr2.heroL, 0, 0)
+  climbR = MakeAnim(spr.climbR, 0, 0)
+  climbL = MakeAnim(spr.climbL, 0, 0)
+  pPool = MakeAnim(world.poolFront, 0, 0)
+  // light off the crystal catching on the water
+  for i = 0 .. 5
+    var s = MakeAnim(spr.mote, 0, 0)
+    s.color = "#b8cad8"
+    shimmers.Add(s)
+  for i = 0 .. 2
+    ripples.Add(MakeAnim(spr.ripple, 0, 0))
+  for i = 0 .. 1
+    rings.Add(MakeAnim(spr.ripple, 0, 0))
+    wakes.Add(MakeAnim(spr.ripple, 0, 0))
+  splash = MakeAnim(spr.splash, 0, 0)
+  for i = 0 .. 1
+    var d = MakeAnim(spr.mote, 0, 0)
+    d.color = "#8a9cae"
+    drops.Add(d)
+  for i = 0 .. 2
+    poolMotes.Add(MakeAnim(spr.mote, 0, 0))
+  lead = MakeAnim(spr.mote, 0, 0)
+  for i = 0 .. MOTE_N - 1
+    var m = MakeAnim(spr.mote, 0, 0)
+    m.color = DEPTH_C[i % 3]
+    motes.Add(m)
+  for i = 0 .. 7
+    cleftMotes.Add(MakeAnim(spr.mote, 0, 0))
+  pFront = MakeAnim(world.front, 0, 0)
+
+  glowLow = QueueHalo(71, 27, 92, 102, 120, 0.14)
+  poolGlow = QueueHalo(75, 7, 52, 60, 72, 0.14)
+  splashGlow = QueueHalo(23, 7, 100, 110, 125, 0.16)
+  leadGlow = QueueHalo(7, 3, 80, 88, 104, 0.16)
+  glowHigh = QueueHalo(45, 27, 66, 74, 88, 0.12)
+  tipGlow = QueueHalo(19, 9, 80, 90, 106, 0.15)
+  surgeGlow = QueueHalo(29, 13, 80, 90, 108, 0.16)
+  for i = 0 .. 1
+    cleftGlow.Add(QueueHalo(23, 27, 50, 56, 68, 0.12))
+  // the crystal's light far below, coming up the shaft before it's in view
+  deepGlow = QueueHalo(79, 27, 70, 80, 104, 0.14)
+  // a little of it on him, so the eye finds him in the dark of the chimney
+  himGlow = QueueHalo(15, 9, 44, 50, 60, 0.1)
+
+  shade = Tiles("multiply", 0, H)
+  vig = look.Vignette(root, W, H, 0.35)
+  for c : vig
+    parkable.Add(c)
+  var lb = IMax(2, H / 12)
+  for c : Tiles("opaque", 0, lb)
+    bars.Add(c)
+  for c : Tiles("opaque", H - lb, lb)
+    bars.Add(c)
+  Solid(bars)
+  card1 = MakeText("He fell all the way down,")
+  banner.Build(root, "The World Fountain", 0, 3, T_LAND + 70, lb + 1)
+  card1.y = -1
+  card2 = MakeText("to the World Fountain, where the Ki comes from.")
+  card2.y = 1
+
+
+// ---------------------------------------------------------------- helpers
+
+func IMin(a, b)
+  ?a < b
+    return a
+  return b
+
+func IMax(a, b)
+  ?a > b
+    return a
+  return b
+
+func Prog(a, b)
+  return math.Clamp((f - a) * 1.0 / (b - a), 0.0, 1.0)
+
+func Fade(a, b, c, d)
+  return color.Lerp("#000000", "#e7e3da", Prog(a, b) - Prog(c, d))
+
+func IsFast(ku)
+  return ku[2] = 1
+
+func Wrap(v, m)
+  return v - math.Floor(v / m) * m
+
+func SetShade(col)
+  ?!string.Equals(col, shadeCol)
+    shadeCol = col
+    for c : shade
+      c.SetFG(col)
+      c.SetBG(col)
+
+func Show(c, on)
+  c.visible = on
+
+func ShowAll(list, on)
+  for c : list
+    c.visible = on
+
+// on its source this frame, or off screen with no width (the game draws every canvas, hidden or not)
+func Light(c, on, x, y)
+  ?on
+    var w = lightW[allLights.IndexOf(c)]
+    c.w = w
+    c.x = x - w / 2
+    c.y = y - c.h / 2
+  :
+    c.x = OFF
+    c.w = 0
+
+// cavern cell -> screen
+func SX(x)
+  return math.RoundToInt(x - camX)
+
+func SY(y)
+  return math.RoundToInt(y - camY)
+
+// his feet's row, t frames into the fall: speeding up, then falling flat out
+func FallY(t)
+  ?t < 43
+    return -2 + 0.015 * t * t
+  return 25.735 + 1.29 * (t - 43)
+
+// where he is across the cavern (his head's column)
+func HeroX()
+  ?f < T_WADE
+    return world.landX
+  ?f < T_EDGE
+    return world.landX + WADE_V * (f - T_WADE)
+  ?f < T_SHORE
+    return SHORE_X - 3 + IMin(4, (f - T_EDGE) / 10)
+  ?f < T_CLEFT
+    return SHORE_X + 1 + WALK_V * (f - T_SHORE)
+  return START_X
+
+// him with his sword, by his head's cell, feet on row r
+func HeroAt(hx, r, frame, left)
+  var b = heroR
+  ?left
+    b = heroL
+  Show(b, true)
+  b.x = SX(hx) - 1
+  ?left
+    b.x = SX(hx) - 4
+  b.y = SY(r) - 3
+  b.frame = frame
+  glowX = hx + 1
+  glowY = r - 2
+  himX = b.x
+  himY = b.y
+  himW = 6
+
+// him climbing, by his head's cell, his top row on row top
+func ClimbAt(hx, top, frame, left)
+  var b = climbR
+  ?left
+    b = climbL
+  Show(b, true)
+  b.x = SX(hx) - 1
+  ?left
+    b.x = SX(hx) - 2
+  b.y = SY(top)
+  b.frame = frame
+  glowX = hx
+  glowY = top + 1
+  himX = b.x
+  himY = b.y
+  himW = 3
+
+
+// ---------------------------------------------------------------- him
+
+func Him()
+  ?f < T_DROP
+    return
+  ?f < T_LAND
+    // falling, tumbling
+    var t = f - T_DROP
+    feetNow = FallY(t)
+    HeroAt(world.landX + (t / 8) % 2, feetNow, 5, false)
+    return
+  feetNow = world.floor
+  var b = f - T_LAND
+  ?b < 8
+    // under
+    return
+  :?b < 40
+    // up to his neck in it
+    HeroAt(world.landX, world.floor, 11, false)
+  :?b < 48
+    HeroAt(world.landX, world.floor, 9, false)
+  :?b < 72
+    HeroAt(world.landX, world.floor, 4, false)
+  :?b < 94
+    // a look back the way he came
+    HeroAt(world.landX, world.floor, 4, true)
+  :?f < T_WADE
+    HeroAt(world.landX, world.floor, 4, false)
+  :?f < T_EDGE
+    // after it, wading, the water at his waist
+    HeroAt(HeroX(), world.floor, (f / 6) % 4, false)
+  :?f < T_SHORE
+    Out(f - T_EDGE)
+  :?f < T_CLEFT
+    HeroAt(HeroX(), world.floor, (f / 6) % 4, false)
+  :?f < T_CLIMB
+    HeroAt(START_X, world.floor, 4, false)
+  :
+    Climb(f - T_CLIMB)
+
+// climbing out at the pool's edge: hands on the bank, a knee up, then on his feet, dripping
+func Out(u)
+  ?u < 8
+    HeroAt(SHORE_X - 3, world.floor, 4, false)
+  :?u < 18
+    HeroAt(SHORE_X - 2, world.floor, 9, false)
+  :?u < 30
+    HeroAt(SHORE_X - 1, world.floor - 1, 5, false)
+  :?u < 40
+    HeroAt(SHORE_X, world.floor, 11, false)
+  :
+    HeroAt(SHORE_X + 1, world.floor, 4, false)
+
+// which ledge he's heading for t frames into the climb, how far into it (u), and whether
+// he's found his rhythm (1) or not (0). on the slip ledge u runs 40 to 40 + SLIP_T through the slip
+func ClimbKU(t)
+  var slow = N_SLOW * CLIMB_T + SLIP_T
+  ?t >= slow
+    return [N_SLOW + (t - slow) / FAST_T, (t - slow) % FAST_T, 1]
+  var k = t / CLIMB_T
+  var u = t % CLIMB_T
+  ?t >= (SLIP_K + 1) * CLIMB_T + SLIP_T
+    k = (t - SLIP_T) / CLIMB_T
+    u = (t - SLIP_T) % CLIMB_T
+  :?t >= SLIP_K * CLIMB_T
+    k = SLIP_K
+    u = t - SLIP_K * CLIMB_T
+    ?u >= 40 + SLIP_T
+      u = u - SLIP_T
+  return [k, u, 0]
+
+func Slipping(ku)
+  return !IsFast(ku) & ku[0] = SLIP_K & ku[1] >= 40 & ku[1] < 40 + SLIP_T
+
+// where the camera sits for ledge k (the floor before the first)
+func CamFor(k)
+  ?k < 0
+    return CAM_FLOOR
+  return IMax(CAM_TOP, IMin(CAM_FLOOR, world.ledgeY[k] - (cy + 7)))
+
+// up the chimney a ledge at a time: crouch, jump, dangle, strain up, forearms, knee, breathe, stand.
+// he slips on the second ledge, and after the third he goes quicker
+func Climb(t)
+  var ku = ClimbKU(t)
+  var k = ku[0]
+  var u = ku[1]
+  ?Slipping(ku)
+    // slipped: back to hanging, then up again
+    ?u < 48
+      ClimbAt(world.ledgeX[k], world.ledgeY[k] + 1, 1 + (u / 8) % 2 * 2, world.ledgeX[k] < world.ledgeX[k - 1])
+      feetNow = world.ledgeY[k] + 4
+    :
+      ClimbAt(world.ledgeX[k], world.ledgeY[k] + 1, 5 + (u / 6) % 2, world.ledgeX[k] < world.ledgeX[k - 1])
+      feetNow = world.ledgeY[k] + 3
+    return
+  ?k >= world.ledgeX.Count()
+    return
+  ?IsFast(ku)
+    ClimbFast(k, u)
+    return
+  var x0 = START_X
+  var r0 = world.floor
+  ?k > 0
+    x0 = world.ledgeX[k - 1]
+    r0 = world.ledgeY[k - 1]
+  var x1 = world.ledgeX[k]
+  var r1 = world.ledgeY[k]
+  var left = x1 < x0
+  ?u < 8
+    HeroAt(x0, r0, 11, left)
+    feetNow = r0
+  :?u < 14
+    var p = (u - 7) / 6.0
+    ClimbAt(x0 + (x1 - x0) * p, r0 - 2 + (r1 - r0 + 4) * p, 0, left)
+    feetNow = r0 + (r1 + 4 - r0) * p
+  :?u < 28
+    // dangling, legs going
+    ClimbAt(x1, r1 + 1, 1 + (u / 8) % 2 * 2, left)
+    feetNow = r1 + 4
+  :?u < 40
+    // straining up to the edge
+    ClimbAt(x1, r1 + 1, 5 + (u / 6) % 2, left)
+    feetNow = r1 + 3
+  :?u < 48
+    // up on his forearms, still kicking
+    ClimbAt(x1, r1, 2 + (u / 6) % 2 * 2, left)
+    feetNow = r1 + 2
+  :?u < 56
+    HeroAt(x1, r1, 11, left)
+    feetNow = r1
+  :?u < 64
+    // bent over, getting his breath back
+    HeroAt(x1, r1, 9, left)
+    feetNow = r1
+  :
+    HeroAt(x1, r1, 4, left)
+    feetNow = r1
+
+// a ledge once he's got the hang of it
+func ClimbFast(k, u)
+  var x0 = world.ledgeX[k - 1]
+  var r0 = world.ledgeY[k - 1]
+  var x1 = world.ledgeX[k]
+  var r1 = world.ledgeY[k]
+  var left = x1 < x0
+  ?u < 5
+    HeroAt(x0, r0, 11, left)
+  :?u < 9
+    var p = (u - 4) / 5.0
+    ClimbAt(x0 + (x1 - x0) * p, r0 - 2 + (r1 - r0 + 4) * p, 0, left)
+  :?u < 15
+    ClimbAt(x1, r1 + 1, 1 + (u / 6) % 2 * 2, left)
+  :?u < 23
+    ClimbAt(x1, r1 + 1, 5 + (u / 6) % 2, left)
+  :?u < 29
+    ClimbAt(x1, r1, 2 + (u / 6) % 2 * 2, left)
+  :?u < 35
+    HeroAt(x1, r1, 11, left)
+  :
+    HeroAt(x1, r1, 4, left)
+  feetNow = r1
+
+
+// ---------------------------------------------------------------- the water
+
+func Water()
+  ?f < T_LAND
+    return
+  var b = f - T_LAND
+  // the splash, and the rings it leaves
+  Show(splash, b < 20)
+  splash.frame = b / 4
+  splash.x = SX(world.landX) - 4
+  splash.y = SY(world.floor) - 4
+  for i = 0 .. 1
+    var a = b - 4 - i * 9
+    Show(rings[i], a >= 0 & a < 24)
+    rings[i].frame = IMax(0, a) / 4
+    rings[i].x = SX(world.landX) - 4
+    rings[i].y = SY(world.floor - 1 + i * 2)
+  ?b = 0
+    play waterfall_splash
+  Light(splashGlow, jobs.Count() = 0 & b < 12, SX(world.landX), SY(world.floor))
+  // water running off him as he gets up, and again on the bank
+  for i = 0 .. 1
+    var d = b - 48 - i * 9
+    var dx = world.landX + 1 - i * 2
+    var e = f - T_SHORE + 12 - i * 7
+    ?e >= 0 & e < 10
+      d = e
+      dx = SHORE_X + 2 - i * 2
+    Show(drops[i], d >= 0 & d < 10)
+    drops[i].frame = 2
+    drops[i].x = SX(dx)
+    drops[i].y = SY(world.floor - 1) + IMin(1, d / 5)
+  // the crystal's light catching on the water here and there
+  for i = 0 .. 5
+    var s = shimmers[i]
+    var per = 31 + i * 6
+    var ph = (f + i * 17) % per
+    var cyc = (f + i * 17) / per
+    var sx = world.poolX0 + 4 + (cyc * 29 + i * 13) % (world.poolX1 - world.poolX0 - 8)
+    var near = math.Abs(sx - HeroX()) < 4 & f < T_SHORE
+    Show(s, ph < 12 & !near)
+    s.frame = 0
+    ?ph >= 6
+      s.frame = 2
+    s.x = SX(sx)
+    s.y = SY(world.floor - 1 + (i % 2) * 2)
+  // his wake as he wades
+  for i = 0 .. 1
+    var a = (f - T_WADE + i * 11) % 22
+    var at = f - a
+    Show(wakes[i], at >= T_WADE & at < T_EDGE)
+    wakes[i].frame = a / 4
+    wakes[i].x = SX(world.landX + WADE_V * (at - T_WADE)) - 4
+    wakes[i].y = SY(world.floor)
+
+
+// ---------------------------------------------------------------- the Ki
+
+func Ki()
+  // Ki rising everywhere, drifting toward the chimney. motes wrap round the screen so
+  // there's always as many in view, far ones move less with the camera
+  for i = 0 .. MOTE_N - 1
+    var m = motes[i]
+    var d = i % 3
+    var k = DEPTH_K[d]
+    var x0 = (i * 53 + 7) % 101
+    var y0 = (i * 37 + 11) % 61
+    m.x = math.RoundToInt(Wrap(x0 + 1.5 * math.Sin(f * 0.04 + i) + f * 0.02 - camXf * k, W + 4)) - 2
+    m.y = math.RoundToInt(Wrap(y0 - f * DEPTH_V[d] - camYf * k, H + 4)) - 2
+    m.frame = 0
+    Show(m, !OnHim(m.x, m.y))
+    ?d = 2 & (f / 6 + i * 5) % 17 = 0
+      m.frame = 3
+    :?d = 1 & (f / 9 + i) % 11 = 0
+      m.frame = 1
+    :?d = 0
+      m.frame = 2
+  // thick and quick up the chimney
+  for i = 0 .. 7
+    var m = cleftMotes[i]
+    var x = SX(world.cleftX0 + 2 + (i * 5) % 15 + math.Sin(f * 0.06 + i * 2) * 1.2)
+    m.x = x
+    m.y = math.RoundToInt(Wrap((i * 23) % 47 - f * 0.32 - camYf, H + 4)) - 2
+    Show(m, x >= 0 & x < W & !OnHim(m.x, m.y))
+    m.frame = (f / 4 + i) % 2
+  // out of the pool, each leaving a ring where it leaves the water
+  for p = 0 .. 2
+    var age = (f + p * 43) % 130
+    var cyc = (f + p * 43) / 130
+    var bx = world.poolX0 + 6 + (cyc * 17 + p * 23) % (world.poolX1 - world.poolX0 - 12)
+    var m = poolMotes[p]
+    m.x = SX(bx + math.Sin(age * 0.07 + p) * 1.2)
+    m.y = SY(world.floor - 1 - age * 0.12)
+    Show(m, !OnHim(m.x, m.y))
+    m.frame = 0
+    Show(ripples[p], age < 24)
+    ripples[p].frame = age / 4
+    ripples[p].x = SX(bx) - 4
+    ripples[p].y = SY(world.floor - 1)
+  Lead()
+
+// whether a cell is in his box (the Ki goes behind him there so it doesn't flicker on him)
+func OnHim(x, y)
+  return x >= himX & x < himX + himW & y >= himY & y < himY + 4
+
+// the mote he follows: up out of the water, past his face, then at eye level to the chimney and up it
+func Lead()
+  var b = f - T_LAND - 100
+  var on = b >= 0 & f < T_CLIMB + 60
+  Show(lead, on)
+  ?!on
+    leadGlow.x = OFF
+    return
+  var x = world.landX + 2
+  var y = world.floor - b * 0.08
+  ?b >= 30
+    x = world.landX + 2 + IMin(10, b - 30) * 0.1
+    y = world.floor - 2.4 + 0.5 * math.Sin(b * 0.08)
+  ?f >= T_WADE
+    // off his rounded cell like the camera or it wobbles, and clear of his blade or it flickers
+    x = math.RoundToInt(HeroX()) + 4 + math.Sin(f * 0.05)
+    y = world.floor - 2.6 + 0.6 * math.Sin(f * 0.07)
+  ?f >= T_CLEFT
+    x = START_X + 3 + (f - T_CLEFT) * 0.06
+    y = world.floor - 2.6 - (f - T_CLEFT) * 0.15
+  lead.x = SX(x)
+  lead.y = SY(y)
+  lead.frame = 0
+  ?(f / 5) % 7 = 0
+    lead.frame = 3
+  Light(leadGlow, jobs.Count() = 0, SX(x), SY(y))
+  // the ring it leaves as it comes out of the water
+  ?b < 24
+    Show(rings[0], true)
+    rings[0].frame = b / 4
+    rings[0].x = SX(world.landX + 2) - 4
+    rings[0].y = SY(world.floor)
+
+
+// ---------------------------------------------------------------- life
+
+func Crystal(lit)
+  var tip = world.crystalTip
+  var x = world.crystalX
+  Light(deepGlow, lit & f < T_LAND, SX(x), SY(tip - 9))
+  Light(glowLow, lit, SX(x - 4), SY(76))
+  Light(glowHigh, lit, SX(x - 2), SY(54))
+  Light(tipGlow, lit, SX(x), SY(tip + 2))
+  Light(poolGlow, lit, SX(54), SY(world.floor))
+  // the Ki surging up inside it, and a swell of light going up with it
+  for i = 0 .. 2
+    var s = surges[i]
+    var age = (f + i * 37) % 110
+    var y = world.backEdge - 3 - age * 0.5
+    var sx = SURGE_X[i]
+    Show(s, sx > x - (y - tip))
+    s.x = SX(sx)
+    s.y = SY(y)
+  var sy = world.backEdge - (f % 150) * 0.45
+  Light(surgeGlow, lit & sy > tip - 4, SX(x - 4), SY(sy))
+  for i = 0 .. 1
+    Light(cleftGlow[i], lit, SX((world.cleftX0 + world.cleftX1) / 2), SY(world.floor - 12 - i * 26))
+  // light catching the small crystals
+  for i = 0 .. glints.Count() - 1
+    var g = glints[i]
+    var p = (f / 4 + i * 9) % 29
+    g.frame = 1
+    ?p = 1
+      g.frame = 2
+    :?p < 3
+      g.frame = 0
+    g.x = SX(world.glintX[i])
+    g.y = SY(world.glintY[i])
+
+
+// ---------------------------------------------------------------- sounds
+
+// sounds for the fall, the water, the mote and every ledge (the splash is with the water)
+func Sfx()
+  ?f = T_DROP + 4
+    play air_hiss 125
+  :?f = T_LAND + 44
+    // up out of the water
+    play pickup_tar 85
+  :?f = T_LAND + 100
+    // the mote, up out of the water in front of him
+    play talisman_reveal 90
+  :?f = T_EDGE + 10
+    // hands on the bank
+    play cross_deadwood_bump 85
+  :?f = T_EDGE + 18
+    // and up out of the water
+    play cross_deadwood_splash 115
+  :?f = T_EDGE + 31
+    play pickup_stone 90
+  :?f = T_EDGE + 42
+    play pickup_tar 120
+  :?f = T_CLEFT + 12
+    // it goes on up the chimney
+    play blade_glow 75
+  // the water round him all the way across
+  ?f >= T_WADE & f < T_EDGE - 20 & (f - T_WADE) % 45 = 4
+    play cross_deadwood_row @104 - (f - T_WADE) / 45 % 2 * 8@
+  ?f < T_CLIMB
+    return
+  // the climb: the same count as Climb, slip and all
+  var ku = ClimbKU(f - T_CLIMB)
+  var k = ku[0]
+  var u = ku[1]
+  ?Slipping(ku)
+    ?u = 40
+      // his grip goes
+      play blade_drag 55
+    :?u = 45
+      play stone_throw_hit 65
+    return
+  ?k >= world.ledgeX.Count()
+    return
+  // beats in a ledge's climb: jump, hands, forearms, weight. closer together and no
+  // forearms once he's quicker, so it doesn't patter
+  var tj = 9
+  var tg = 14
+  var tf = 41
+  var tw = 48
+  ?IsFast(ku)
+    tj = 5
+    tg = 9
+    tf = -1
+    tw = 29
+  var p = 104 - k * 4
+  ?u = tj
+    ?k % 2 = 0
+      play worm_rider_hop @p@
+    :
+      play quest_stone_jump @p - 8@
+  :?u = tg
+    ?k % 2 = 0
+      play waterfall_rope_grab @p + 6@
+    :
+      play grappling_idle2 @p@
+  :?u = tf
+    play pickup_stone @p - 12@
+  :?u = tw
+    ?k % 2 = 0
+      play waterfall_land @p + 8@
+    :
+      play mine_walker_step @p@
+
+
+// ---------------------------------------------------------------- the frame
+
+func Frame()
+  for c : allLights
+    c.x = OFF
+    c.w = 0
+  Show(heroR, false)
+  Show(heroL, false)
+  Show(climbR, false)
+  Show(climbL, false)
+  Show(splash, false)
+  ShowAll(rings, false)
+  ShowAll(wakes, false)
+  ShowAll(drops, false)
+
+  // camera: still over the dark, down with his fall, along with him, then up the chimney
+  camXf = math.Max(0.0, HeroX() - (cx - 6))
+  camX = IMax(0, math.RoundToInt(HeroX()) - (cx - 6))
+  ?f < T_DROP
+    camYf = 0
+  :?f < T_LAND
+    camYf = IMax(0, IMin(CAM_FLOOR, math.RoundToInt(FallY(f - T_DROP)) - (cy - 2)))
+  :?f < T_CLIMB
+    camYf = CAM_FLOOR
+  :
+    // up a ledge at a time, only while he hangs, so it never moves while he does (his feet drop
+    // on every jump, following them bobs). once he's in his rhythm it stays put and he climbs out
+    var ku = ClimbKU(f - T_CLIMB)
+    var k = ku[0]
+    var p = math.Clamp((ku[1] - 14) / 26.0, 0.0, 1.0)
+    ?IsFast(ku)
+      k = N_SLOW - 1
+      p = 1.0
+    camYf = CamFor(k - 1) + (CamFor(k) - CamFor(k - 1)) * p
+  camY = math.RoundToInt(camYf)
+
+  pFar.x = -math.RoundToInt(camX * 0.6)
+  pFar.y = -math.RoundToInt(camY * 0.6)
+  pMidL.x = SX(0)
+  pMidL.y = SY(0)
+  pMidR.x = SX(world.midSplit)
+  pMidR.y = SY(0)
+  pPool.x = SX(0)
+  pPool.y = SY(0)
+  pFront.x = -math.RoundToInt(camX * 1.4)
+  pFront.y = SY(0)
+
+  var lit = jobs.Count() = 0
+  himW = 0
+  Him()
+  Water()
+  Ki()
+  Crystal(lit)
+  Light(himGlow, lit & f >= T_SHORE, SX(glowX), SY(glowY))
+  Sfx()
+
+  // the words, then the dark coming up, and going down at the end
+  card1.color = Fade(T_CARD1, T_CARD1 + 25, T_CARDS_OUT, T_CARDS_OUT + 25)
+  card2.color = Fade(T_CARD2, T_CARD2 + 25, T_CARDS_OUT, T_CARDS_OUT + 25)
+  Show(card1, f < T_CARDS_OUT + 26)
+  banner.Update(f)
+  Show(card2, f < T_CARDS_OUT + 26)
+  // no fade: straight in from scene 2's fall, cuts to scene 4 on his hands coming out of the hole
+  SetShade(GRADE)
+  ?f = 0
+    ambient.Stop()
+    ambient.Add("ambient_cave")
+  :?f = T_LAND + 20
+    ambient.Add("ambient_temple")
+
+
+// ---------------------------------------------------------------- the film calls these
+
+// a scene built ahead waits off to the side, but the game still draws its canvases,
+// so they get no width till it's on
+func Park()
+  parkW = []
+  for c : parkable
+    parkW.Add(c.w)
+    c.w = 0
+
+func Unpark()
+  for i = 0 .. parkable.Count() - 1
+    var c = parkable[i]
+    c.w = parkW[i]
+
+// built near the end of the scene before so its lights are ready, then waits off to
+// the side (ui.Remove would throw it away)
+func Warm()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+    root.x = OFF
+    parked = true
+    Park()
+    // nothing else on the frame it's built in, that's heavy enough
+    return
+  RunJobs()
+
+func Update()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+  ?parked
+    root.x = 0
+    parked = false
+    Unpark()
+  ?!attached
+    ui.root.Add(root)
+    attached = true
+  RunJobs()
+  Frame()
+  ?f <= T_END
+    f++
+  :
+    over = true
+
+// take its picture off the screen (another scene is playing)
+func Detach()
+  ?attached
+    ui.root.Remove(root)
+    attached = false
+
+// back to the start, for watching again
+func Reset()
+  f = 0
+  over = false
+  camYf = 0

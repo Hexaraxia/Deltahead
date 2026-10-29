@@ -1,0 +1,86 @@
+// preview only (not in the package): end of scene 6 (the title) into act 3 (scenes 7 to 13) the way Main does it,
+// each scene built ahead and cutting straight in. the simulator runs it instead of Main, render from frame 2250
+
+var film6 = new Deltahead/Scene6
+var film7 = null
+var film8 = null
+var film9 = null
+var film10 = null
+var film11 = null
+var film12 = null
+var film13 = null
+var part = 6
+
+?string.Equals(loc.id, "waterfall")
+  ?part = 6
+    film6.Update()
+    ?film6.f >= film6.T_END - 90
+      ?film7 = null
+        film7 = new Deltahead/Scene7
+      film7.Warm()
+    ?film6.over
+      film6.Detach()
+      part = 7
+      film7.Update()
+  :?part = 7
+    film7.Update()
+    ?film7.f >= film7.T_END - 90
+      ?film8 = null
+        film8 = new Deltahead/Scene8
+      film8.Warm()
+    ?film7.over
+      film7.Detach()
+      part = 8
+      film8.Update()
+  :?part = 8
+    film8.Update()
+    ?film8.f >= film8.T_END - 90
+      ?film9 = null
+        film9 = new Deltahead/Scene9
+      film9.Warm()
+    ?film8.over
+      film8.Detach()
+      part = 9
+      film9.Update()
+  :?part = 9
+    film9.Update()
+    ?film9.f >= film9.T_END - 90
+      ?film10 = null
+        film10 = new Deltahead/Scene10
+      film10.Warm()
+    ?film9.over
+      film9.Detach()
+      part = 10
+      film10.Update()
+  :?part = 10
+    film10.Update()
+    ?film10.f >= film10.T_END - 90
+      ?film11 = null
+        film11 = new Deltahead/Scene11
+      film11.Warm()
+    ?film10.over
+      film10.Detach()
+      part = 11
+      film11.Update()
+  :?part = 11
+    film11.Update()
+    ?film11.f >= film11.T_END - 90
+      ?film12 = null
+        film12 = new Deltahead/Scene12
+      film12.Warm()
+    ?film11.over
+      film11.Detach()
+      part = 12
+      film12.Update()
+  :?part = 12
+    film12.Update()
+    ?film12.f >= film12.T_END - 90
+      ?film13 = null
+        film13 = new Deltahead/Scene13
+      film13.Warm()
+    ?film12.over
+      film12.Detach()
+      part = 13
+      film13.Update()
+  :
+    film13.Update()

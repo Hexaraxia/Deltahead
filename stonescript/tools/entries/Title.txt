@@ -1,0 +1,25 @@
+// preview only (not in the package): plays the title card by itself on black. the simulator runs it instead of Main
+
+var title = new Deltahead/Title
+var f = 0
+var built = false
+var root = null
+var invis = ui.AddStyle("#########")
+
+?string.Equals(loc.id, "waterfall")
+  ?!built
+    built = true
+    disable hud
+    disable player
+    root = ui.AddPanel()
+    root.style = invis
+    root.anchor = "top_left"
+    root.dock = "top_left"
+    root.x = 0
+    root.y = 0
+    root.w = screen.w
+    root.h = screen.h
+    ui.root.Add(root)
+    title.Build(root, 15)
+  title.Update(f)
+  f = f + 1

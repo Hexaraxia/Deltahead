@@ -1,0 +1,102 @@
+// One must imagine the deltahead happy
+// Speech: the words typed out over the speaker, wrapped short, with a thin │
+// down to their head like the game's speech bubble, but no box hiding the picture.
+// make one per line in Build, then Show or Hide it each frame
+
+var OFF = -1000
+var WRAP = 34           // longer than this goes onto two lines
+
+// splits at the space nearest the middle so the halves come out even
+func Lines(s)
+  var out = []
+  var size = string.Size(s)
+  ?size <= WRAP
+    out.Add(s)
+    return out
+  var half = size / 2
+  var cut = -1
+  for i = 1 .. size - 2
+    ?string.Equals(string.Sub(s, i, 1), " ")
+      ?cut < 0 | math.Abs(i - half) < math.Abs(cut - half)
+        cut = i
+  ?cut < 0
+    cut = half
+  out.Add(string.Sub(s, 0, cut))
+  out.Add(string.Sub(s, cut + 1, size - cut - 1))
+  return out
+
+// returns [texts, lines, pointer, widest line]
+func Make(parent, s)
+  var lines = Lines(s)
+  var texts = []
+  var widest = 0
+  for ln : lines
+    var t = ui.AddText("")
+    parent.Add(t)
+    t.anchor = "top_left"
+    t.dock = "top_left"
+    t.x = OFF
+    t.y = 0
+    t.w = string.Size(ln)
+    t.h = 1
+    t.align = "left"
+    t.color = "#f0f0f0"
+    t.visible = false
+    texts.Add(t)
+    ?string.Size(ln) > widest
+      widest = string.Size(ln)
+  var p = ui.AddText("│")
+  parent.Add(p)
+  p.anchor = "top_left"
+  p.dock = "top_left"
+  p.x = OFF
+  p.y = 0
+  p.w = 1
+  p.h = 1
+  p.color = "#848484"
+  p.visible = false
+  return [texts, lines, p, widest]
+
+// over a head at (mx, my) with the first n letters typed. each line is centered
+// where it'll end up and kept on screen
+func Show(b, mx, my, n, W, col)
+  var texts = b[0]
+  var lines = b[1]
+  var w = b[3]
+  var bx = mx - w / 2
+  ?bx > W - w - 1
+    bx = W - w - 1
+  ?bx < 1
+    bx = 1
+  var left = n
+  var k = lines.Count()
+  for i = 0 .. k - 1
+    var t = texts[i]
+    var ln = lines[i]
+    var size = string.Size(ln)
+    t.visible = left > 0
+    t.x = bx + (w - size) / 2
+    t.y = my - 1 - k + i
+    ?left >= size
+      t.text = ln
+    :
+      t.text = string.Sub(ln, 0, IMax(0, left))
+    left = left - size - 1
+    t.color = col
+  var p = b[2]
+  p.visible = true
+  p.x = mx
+  p.y = my - 1
+  p.color = color.Lerp("#000000", col, 0.55)
+
+func Hide(b)
+  for t : b[0]
+    t.x = OFF
+    t.visible = false
+  b[2].x = OFF
+  b[2].visible = false
+
+func IMax(a, b)
+  ?a > b
+    return a
+  return b

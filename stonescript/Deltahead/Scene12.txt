@@ -1,0 +1,987 @@
+// One must imagine the deltahead happy
+// Scene 12: The headless stand
+//
+// the headless body keeps hopping the lash like on every lap (cut with a gray ghost of him on the Ring),
+// the whip takes the pack, the body cuts the whip and pushes the Controller into the crevasse.
+// only the whip is heard at the summit. one frame counter, 30 a second, plus story time
+
+var world = import Deltahead/Art10Summit
+var art = import Deltahead/Art12Stand
+var s8 = import Deltahead/Art8Sprites
+var s7 = import Deltahead/Art7Sprites
+var hts = import Deltahead/Art7Heights
+var skyArt = import Deltahead/ArtSky
+var ring = import Deltahead/Art1Ring
+var desc = import Deltahead/Art1Descent
+var spr1 = import Deltahead/Art1Sprites
+var fallArt = import Deltahead/Art11Fall
+var look = import Deltahead/Look
+// flashes and shake options (no comment on an import line or the game can't read the file)
+var opt = import Deltahead/Options
+var snowLight = import Deltahead/Sparkle
+
+// timing: real frames for the card, story frames (see MARKS) for the rest
+var T_CARD = 20
+var T_CARD_OUT = 120
+var SKIP = 80           // story time at the cut from the O, the card plays over the summit
+var T_END = 0           // set in Build
+var MARKS = [264, 3, 344, 3, 414, 3, 614, 8, 940, -24]
+var SHAKES = [614, 10, 2]
+var IMPACTS = [614, 3]
+var SHK = []
+var IMP = []
+// when each lash starts and how long each swing pose holds (they speed up)
+var LASH = [236, 318, 385, 458, 503, 546, 588]
+var WIND = [5, 5, 5, 3, 3, 3, 3]
+var PITCH = [84, 90, 78, 96, 88, 100]
+// body walks: [from, to, x]
+var WALKS = [300, 320, 52, 362, 382, 57, 440, 452, 60, 494, 504, 62, 538, 546, 64, 600, 614, 66, 636, 672, 78]
+var T_PUSH = 672        // hands on him
+var PUSH_V = 0.3        // his cart pace on the Ring
+var T_EDGE = 935        // hooves at the lip
+var T_TIP = 943         // over
+var T_LAST = 1000       // last cut to the Ring
+// pack moves: [from, to, 0, x] walks to x, [from, to, 1, d] gets thrown d. then their bites
+var A_MV = [220, 232, 0, 48, 264, 276, 1, -2]
+var B_MV = [300, 312, 0, 55, 344, 356, 1, -2]
+var C_MV = [322, 360, 0, 46, 386, 396, 0, 48, 414, 426, 1, 2]
+var A_BITES = [251]
+var B_BITES = [331]
+var C_BITES = [402]
+var E_BITE = [2, 2, 3, 3, 1, 2, 1, 1, 1, 1, 1, 2, 2, 18]
+// cuts to the Ring: [from, to] story frames, where the ghost starts, when he hops (-1 = no hop)
+var CUTS = [244, 262, 394, 408, 474, 482, 520, 526, 563, 567, 700, 745, 805, 828, 868, 880]
+var GHOST_X = [101, 104, 106, 107, 108, 99, 103, 106]
+var GHOST_HOP = [247, 397, 474, 520, 563, -1, -1, -1]
+
+var GREEN = "#32da5a"
+var GOLD = "#d7af42"
+var SHINE = "#fff1b0"
+var GONE = "#262b30"
+var GHOST = "#56606a"
+var GHOST_CART = "#3a4148"
+var GRADE_H = "#ccd6e4"    // the summit by moonlight
+var GRADE_RING = "#cfa98c" // the Ring by lantern light, same as scenes 1 and 11
+var moonGlow = null
+var glints = null
+var vig = []
+
+var f = 0
+var built = false
+var over = false
+var attached = false
+var parked = false
+var parkable = []       // canvases set to 0 width while it waits (Park)
+var parkW = []
+var W = 0
+var H = 0
+var cx = 0
+var cy = 0
+var lb = 0
+var camX = 0
+var camY = 0
+var shadeCol = ""
+var invis = ui.AddStyle("#########")
+var OFF = -1000
+
+var root = null
+var summitPanel = null
+var ringPanel = null
+var backdrop = []
+var shade = []
+var bars = []
+var card = null
+var allLights = []
+var lightW = []          // each light's width (0 while it's off)
+var jobs = []
+// the summit
+var pSky = null
+var moon = null
+var aurora = []
+var pFar = null
+var summit = null
+var pBack = null
+var mist = null
+var mist2 = null
+var fieldA = null
+var fieldB = null
+var crevasse = null
+var cutWhip = null
+var sword = null
+var ctrl = null
+var lash = null
+var eaters = []
+var eaterC = null
+var motes = []
+var puffs = []
+var body = null
+var hits = []
+var bursts = []
+var cloud = null
+var flakes = []
+var near = null
+var auroraGlow = null
+// the Ring
+var rBack = null
+var rMain = null
+var rBend = null
+var rPost = null
+var rFlame = null
+var rMotes = []
+var rRock = null
+var rCart = null
+var rBody = null
+var rCartLayers = []
+var rBodyLayers = []
+var rHead = null
+var rDrips = []
+var rFront = null
+var rLantern = []
+
+
+// ---------------------------------------------------------------- building
+
+func Place(c, x, y)
+  c.anchor = "top_left"
+  c.dock = "top_left"
+  c.x = x
+  c.y = y
+
+func MakeAnim(p, layers, x, y)
+  var a = ui.AddAnim(layers[0][1])
+  p.Add(a)
+  Place(a, x, y)
+  a.color = layers[0][0]
+  ?layers.Count() > 1
+    for i = 1 .. layers.Count() - 1
+      var l = a.AddLayer(layers[i][1])
+      l.color = layers[i][0]
+  return a
+
+// every layer in one color (the ghost), layers kept in keep so they can be recolored
+func MakeTinted(p, layers, col, keep)
+  var a = ui.AddAnim(layers[0][1])
+  p.Add(a)
+  Place(a, 0, 0)
+  a.color = col
+  keep.Add(a)
+  ?layers.Count() > 1
+    for i = 1 .. layers.Count() - 1
+      var l = a.AddLayer(layers[i][1])
+      l.color = col
+      keep.Add(l)
+  return a
+
+func Tint(list, col)
+  for l : list
+    l.color = col
+
+func MakeCanvas(p, x, y, w, h, blend)
+  var c = ui.AddCanvas()
+  parkable.Add(c)
+  p.Add(c)
+  Place(c, x, y)
+  c.w = w
+  c.h = h
+  c.blend = blend
+  c.SetFG("#000000")
+  c.SetBG("#000000")
+  return c
+
+// canvases top out at 100x27, so screen-sized ones are tiled
+func Tiles(blend, y0, rows)
+  var list = []
+  for j = 0 .. (rows - 1) / 27
+    for i = 0 .. (W - 1) / 100
+      var c = MakeCanvas(root, i * 100, y0 + j * 27, IMin(100, W - i * 100), IMin(27, rows - j * 27), blend)
+      list.Add(c)
+  return list
+
+func Solid(list)
+  for c : list
+    c.Set(" ")
+
+func Panel()
+  var p = ui.AddPanel()
+  root.Add(p)
+  p.style = invis
+  Place(p, OFF, 0)
+  p.w = W
+  p.h = H
+  return p
+
+func MakeText(s)
+  var t = ui.AddText(s)
+  root.Add(t)
+  t.anchor = "center_center"
+  t.dock = "center_center"
+  t.x = 0
+  t.y = 0
+  t.w = string.Size(s) + 2
+  t.h = 1
+  t.align = "center"
+  t.color = "#000000"
+  return t
+
+// a light: additive canvas fading out from the center, filled a bit each frame
+func QueueHalo(p, w, h, r, g, b, bgk)
+  var c = MakeCanvas(p, OFF, 0, w, h, "add")
+  jobs.Add([c, w, h, r, g, b, bgk, 0])
+  allLights.Add(c)
+  lightW.Add(w)
+  c.w = 0
+  return c
+
+func RunJobs()
+  look.Run()
+  ?jobs.Count() = 0
+    return
+  var j = jobs[0]
+  var total = j[1] * j[2]
+  var last = IMin(total - 1, j[7] + 150)
+  var hx = (j[1] - 1) / 2.0
+  var hy = (j[2] - 1) / 2.0
+  for i = j[7] .. last
+    var x = i % j[1]
+    var y = i / j[1]
+    var dx = (x - hx) / (hx + 0.5)
+    var dy = (y - hy) / (hy + 0.5)
+    var k = 1.0 - math.Sqrt(dx * dx + dy * dy)
+    ?k > 0
+      k = k * k
+      j[0].SetFG(x, y, color.FromRGB(math.RoundToInt(j[3] * k), math.RoundToInt(j[4] * k), math.RoundToInt(j[5] * k)))
+      j[0].SetBG(x, y, color.FromRGB(math.RoundToInt(j[3] * k * j[6]), math.RoundToInt(j[4] * k * j[6]), math.RoundToInt(j[5] * k * j[6])))
+  j[7] = last + 1
+  ?j[7] >= total
+    jobs.RemoveAt(0)
+
+// real frame for story time S
+func RealAt(S)
+  var r = S
+  for k = 0 .. MARKS.Count() / 2 - 1
+    var s = MARKS[k * 2]
+    var n = MARKS[k * 2 + 1]
+    ?s < S
+      ?n > 0
+        r = r + n
+      :
+        r = r + IMin(-n, S - s)
+  return r
+
+// story time at real frame t
+func Story(t)
+  var cum = 0
+  for k = 0 .. MARKS.Count() / 2 - 1
+    var s = MARKS[k * 2]
+    var n = MARKS[k * 2 + 1]
+    ?t < s + cum
+      return (t - cum) * 1.0
+    ?n > 0
+      ?t < s + cum + n
+        return s * 1.0
+      cum = cum + n
+    :
+      ?t < s + cum - 2 * n
+        return s + (t - s - cum) * 0.5
+      cum = cum - n
+  return (t - cum) * 1.0
+
+func Schedule()
+  // real frames count from the cut, SKIP story frames in. no fade, it ends on the O and scene 13 cuts in
+  T_END = RealAt(T_LAST + 140) - SKIP
+  for k = 0 .. SHAKES.Count() / 3 - 1
+    SHK.Add(RealAt(SHAKES[k * 3]) - SKIP)
+    SHK.Add(SHAKES[k * 3 + 1])
+    SHK.Add(SHAKES[k * 3 + 2])
+  for k = 0 .. IMPACTS.Count() / 2 - 1
+    IMP.Add(RealAt(IMPACTS[k * 2]) - SKIP)
+    IMP.Add(IMPACTS[k * 2 + 1])
+
+func Build()
+  built = true
+  W = screen.w
+  H = screen.h
+  cx = W / 2
+  cy = H / 2
+  lb = IMax(2, H / 12)
+  Schedule()
+  disable hud
+  disable player
+  disable banner
+  storage.Set("hidHud", true)
+
+  root = ui.AddPanel()
+  root.style = invis
+  root.anchor = "top_left"
+  root.dock = "top_left"
+  root.x = 0
+  root.y = 0
+  root.w = W
+  root.h = H
+  attached = true
+  backdrop = Tiles("opaque", 0, H)
+  Solid(backdrop)
+
+  // the summit, back to front: sky, ranges, summit, snow and crevasse, the fight, cloud, near rocks, lights
+  var p = Panel()
+  summitPanel = p
+  pSky = MakeAnim(p, skyArt.sky, 0, -20)
+  moon = MakeAnim(p, skyArt.moon, 4, 2)
+  aurora.Add(MakeAnim(p, s7.auroraLo, 0, 0))
+  aurora.Add(MakeAnim(p, s7.auroraMid, 0, 0))
+  aurora.Add(MakeAnim(p, s7.auroraHi, 0, 0))
+  pFar = MakeAnim(p, hts.far, 0, 0)
+  summit = MakeAnim(p, world.summit, 0, 0)
+  pBack = MakeAnim(p, hts.back, 0, 0)
+  mist = MakeAnim(p, s7.mist, 0, 0)
+  mist2 = MakeAnim(p, s7.mist, 0, 0)
+  fieldA = MakeAnim(p, world.fieldA, 0, 0)
+  fieldB = MakeAnim(p, world.fieldB, 0, 0)
+  crevasse = MakeAnim(p, art.crevasse, 0, 0)
+  // moonlight catching the snow
+  glints = snowLight.Make(p, 6)
+  cutWhip = MakeAnim(p, art.cutWhip, 0, 0)
+  sword = MakeAnim(p, art.sword, 0, 0)
+  ctrl = MakeAnim(p, world.ctrl, 0, 0)
+  lash = MakeAnim(p, world.lash, 0, 0)
+  // the one a row back first so the front one draws over it
+  for i = 0 .. 1
+    eaters.Add(MakeAnim(p, s8.eater, 0, 0))
+  eaterC = MakeAnim(p, s8.eaterR, 0, 0)
+  for i = 0 .. 7
+    motes.Add(MakeAnim(p, s8.mote, 0, 0))
+  for i = 0 .. 3
+    puffs.Add(MakeAnim(p, s7.puff, 0, 0))
+  body = MakeAnim(p, art.body, 0, 0)
+  for i = 0 .. 1
+    hits.Add(MakeAnim(p, s8.hit, 0, 0))
+  for i = 0 .. 1
+    bursts.Add(MakeAnim(p, s8.burst, 0, 0))
+  cloud = MakeAnim(p, s7.cloud, 0, 0)
+  for i = 0 .. 9
+    flakes.Add(MakeAnim(p, s7.flake, 0, 0))
+  near = MakeAnim(p, s7.near, 0, 0)
+  auroraGlow = QueueHalo(p, 80, 14, 14, 52, 22, 0.25)
+  moonGlow = QueueHalo(p, 31, 13, 40, 46, 58, 0.12)
+
+  // the Ring as scene 11 left it, with his ghost going round
+  p = Panel()
+  ringPanel = p
+  rBack = MakeAnim(p, ring.back, 0, 0)
+  rMain = MakeAnim(p, desc.main, 0, 0)
+  rBend = MakeAnim(p, ring.bend, 0, 0)
+  rPost = MakeAnim(p, ring.post, 0, 0)
+  rFlame = MakeAnim(p, spr1.lampFlame, 0, 0)
+  for i = 0 .. 2
+    rMotes.Add(MakeAnim(p, spr1.mote, 0, 0))
+  rRock = MakeAnim(p, spr1.rock, 0, 0)
+  rCart = MakeTinted(p, spr1.cart, GHOST_CART, rCartLayers)
+  rBody = MakeTinted(p, spr1.body, GHOST, rBodyLayers)
+  rHead = MakeAnim(p, fallArt.head, 0, 0)
+  for i = 0 .. 1
+    rDrips.Add(MakeAnim(p, spr1.drip20, 0, 0))
+  rFront = MakeAnim(p, ring.front, 0, 0)
+  rLantern.Add(QueueHalo(p, 45, 15, 149, 101, 40, 0.12))
+  rLantern.Add(QueueHalo(p, 41, 13, 128, 88, 34, 0.12))
+
+  shade = Tiles("multiply", 0, H)
+  vig = look.Vignette(root, W, H, 0.35)
+  for c : vig
+    parkable.Add(c)
+  for c : Tiles("opaque", 0, lb)
+    bars.Add(c)
+  for c : Tiles("opaque", H - lb, lb)
+    bars.Add(c)
+  Solid(bars)
+  card = MakeText("They say the hop was never in his head.")
+  card.y = -(H / 4)
+
+
+// ---------------------------------------------------------------- helpers
+
+func IMin(a, b)
+  ?a < b
+    return a
+  return b
+
+func IMax(a, b)
+  ?a > b
+    return a
+  return b
+
+func Prog(a, b)
+  return math.Clamp((f - a) * 1.0 / (b - a), 0.0, 1.0)
+
+func Ramp(u, n)
+  return math.Clamp(u * 1.0 / n, 0.0, 1.0)
+
+func Out(st, a, b)
+  var u = Ramp(st - a, b - a)
+  return 1.0 - (1.0 - u) * (1.0 - u)
+
+func Walk(t, t0, t1, x0, x1)
+  return x0 + (x1 - x0) * Ramp(t - t0, t1 - t0)
+
+func Fade(a, b, c, d)
+  return color.Lerp("#000000", "#e7e3da", Prog(a, b) - Prog(c, d))
+
+func SetShade(col)
+  ?!string.Equals(col, shadeCol)
+    shadeCol = col
+    for c : shade
+      c.SetFG(col)
+      c.SetBG(col)
+
+func Wrap(v, m)
+  return v - math.Floor(v / m) * m
+
+func Show(c, on)
+  c.visible = on
+
+func ShowAll(list, on)
+  for c : list
+    c.visible = on
+
+// off lights get no width too: the game draws every canvas cell, shown or not
+func Light(c, on, x, y)
+  ?on
+    var w = lightW[allLights.IndexOf(c)]
+    c.w = w
+    c.x = x - w / 2
+    c.y = y - c.h / 2
+  :
+    c.x = OFF
+    c.w = 0
+
+func SX(x)
+  return math.RoundToInt(x - camX)
+
+func SY(y)
+  return math.RoundToInt(y - camY)
+
+func Feet(x)
+  return world.feet0 + (world.feet1 - world.feet0) * x * 1.0 / world.ww
+
+func Cross(sp, st, x)
+  return sp < x & st >= x
+
+func ShakeNow()
+  var amp = 0
+  ?!opt.shake
+    return 0
+  for k = 0 .. SHK.Count() / 3 - 1
+    ?f >= SHK[k * 3] & f < SHK[k * 3] + SHK[k * 3 + 1]
+      amp = IMax(amp, SHK[k * 3 + 2])
+  return amp
+
+func ImpactNow()
+  // impact frames count as a flash, so skip them with flashes off
+  ?!opt.flashes
+    return false
+  for k = 0 .. IMP.Count() / 2 - 1
+    ?f >= IMP[k * 2] & f < IMP[k * 2] + IMP[k * 2 + 1]
+      return true
+  return false
+
+func Seq(u, holds, base, rate)
+  var s = u / rate
+  for i = 0 .. holds.Count() - 1
+    ?s < holds[i]
+      return base + i
+    s = s - holds[i]
+  return base + holds.Count() - 1
+
+func OnPath(a, x, w, h)
+  Show(a, true)
+  var ix = math.RoundToInt(x)
+  a.x = ix - camX
+  a.y = SY(math.FloorToInt(Feet(ix + w / 2))) - (h - 1)
+
+func Hit(k, x, y, u, col)
+  ?u >= 0 & u < 9
+    var a = hits[k]
+    Show(a, true)
+    a.x = SX(x) - 1
+    a.y = SY(y) - 1
+    a.frame = math.FloorToInt(u) / 3
+    a.color = col
+
+func Burst(k, x, y, u, col)
+  ?u >= 0 & u < 12
+    var a = bursts[k]
+    Show(a, true)
+    a.x = SX(x) - 4
+    a.y = SY(y) - 2
+    a.frame = IMin(2, math.FloorToInt(u) / 4)
+    a.color = col
+
+func Puff(k, x, y, u)
+  ?u >= 0 & u < 16
+    var a = puffs[k]
+    Show(a, true)
+    a.x = SX(x) - 6
+    a.y = SY(y) - 3
+    a.frame = IMin(3, math.FloorToInt(u) / 4)
+
+func Mote(k, x, y, u, col)
+  ?u >= 0 & u < 30
+    var a = motes[k]
+    Show(a, true)
+    a.x = SX(x)
+    a.y = SY(y - u * 0.15)
+    a.frame = IMin(2, math.FloorToInt(u) / 10)
+    a.color = color.Lerp(col, "#000000", Ramp(u - 12, 18))
+
+// when the k-th lash leaves his hand
+func WhipAt(k)
+  return LASH[k] + 3 * WIND[k]
+
+
+// ---------------------------------------------------------------- the body
+
+// a few steps nearer after each lash, then pushing him at cart pace, a last shove at the edge
+func BodyX(st)
+  var x = 47.0
+  for k = 0 .. WALKS.Count() / 3 - 1
+    x = Walk(st, WALKS[k * 3], WALKS[k * 3 + 1], x, WALKS[k * 3 + 2])
+  ?st > T_PUSH
+    x = x + PUSH_V * (IMin(st, T_EDGE) - T_PUSH)
+  x = x + 2.0 * Out(st, T_EDGE, T_TIP)
+  return x
+
+// art.body frames: 0-3 walk with the sword, 4 stand with it, 5 hop, 6 raised, 7 plunge,
+// 8 crouched over it, 9 stand empty-handed, 10-13 walk empty-handed, 14-17 push
+func BodyFrame(s, st)
+  var fr = 6
+  ?s >= 290
+    fr = 4
+  for k = 0 .. WALKS.Count() / 3 - 1
+    ?s >= WALKS[k * 3] & s < WALKS[k * 3 + 1]
+      fr = (s / 5) % 4
+  for k = 0 .. 5
+    var h = WhipAt(k) + 7
+    ?s >= h & s < h + 16
+      fr = 5
+  // the last hop is higher, down on the whip point first
+  ?s >= 600 & s < 608
+    fr = 5
+  :?s >= 608 & s < 614
+    fr = 7
+  :?s >= 614 & s < 628
+    fr = 8
+  :?s >= 628 & s < 636
+    fr = 9
+  :?s >= 636 & s < T_PUSH
+    fr = 10 + (s / 5) % 4
+  :?s >= T_PUSH & s < T_TIP + 6
+    fr = 14 + (s / 7) % 4
+  :?s >= T_TIP + 6
+    fr = 9
+  return fr
+
+func BodyDY(s, st)
+  for k = 0 .. 5
+    var h = WhipAt(k) + 7
+    ?s >= h & s < h + 16
+      return -2.0 * math.Sin(Ramp(st - h, 16) * 3.1416)
+  ?s >= 600 & s < 614
+    return -4.0 * math.Sin(Ramp(st - 600, 14) * 3.1416)
+  return 0.0
+
+func Body(s, st)
+  var bx = BodyX(st)
+  var ix = math.RoundToInt(bx)
+  OnPath(body, ix, 1, 1)
+  body.x = ix - camX - 1
+  body.y = SY(math.FloorToInt(Feet(ix))) - 3 + math.RoundToInt(BodyDY(s, st))
+  body.frame = BodyFrame(s, st)
+  // the sword left stuck in the snow through the whip
+  Show(sword, s >= 628)
+  sword.x = SX(67)
+  sword.y = SY(math.FloorToInt(Feet(67))) - 1
+
+
+// ---------------------------------------------------------------- the Controller
+
+// knocked back a step when the whip's cut, then pushed along by the body
+func CtrlX(st)
+  var x = 66.0 + Out(st, 614, 622)
+  ?st > T_PUSH
+    x = math.RoundToInt(BodyX(st)) - 11
+  return x
+
+func Controller(s, st)
+  var x = CtrlX(st)
+  var fr = 0
+  ?s >= 200 & ((s + 10) % 96) < 8
+    fr = 1
+  var u = -1
+  for k = 0 .. 6
+    var w0 = LASH[k]
+    var w1 = WhipAt(k)
+    ?s >= w0 & s < w1
+      fr = 21 + (s - w0) / WIND[k]
+    :?s >= w1 & s < w1 + world.lashN
+      fr = 32
+      u = s - w1
+  ?s >= 614
+    fr = 32
+    u = -1
+  OnPath(ctrl, x, world.ctrlW, world.ctrlH)
+  ctrl.frame = fr
+  var shine = math.Sin(f * 0.13)
+  // kept for the whip too, reading .color back gives a Color not a string, so it cant be copied
+  var col = color.Lerp(GOLD, SHINE, math.Clamp((shine - 0.75) * 4.0, 0.0, 1.0))
+  // over the edge and down into the crevasse, going dark
+  ?s >= T_TIP
+    var t = st - T_TIP
+    ctrl.x = ctrl.x + math.RoundToInt(t * 0.12)
+    ctrl.y = ctrl.y + math.RoundToInt(0.045 * t * t)
+    col = color.Lerp(GOLD, "#1a1608", Ramp(t, 40))
+    Show(ctrl, t < 48)
+  ctrl.color = col
+  Show(lash, u >= 0)
+  ?u >= 0
+    var hx = math.RoundToInt(x) + world.ctrlHandX
+    lash.x = hx - camX - world.lashOX
+    lash.y = ctrl.y + world.ctrlHandY - world.lashOY
+    lash.frame = u
+    lash.color = col
+  // the cut end of the whip, left lying there
+  Show(cutWhip, s >= 614)
+  cutWhip.x = 66 + world.ctrlHandX - camX - world.lashOX
+  cutWhip.y = SY(math.FloorToInt(Feet(77))) - (world.ctrlH - 1) + world.ctrlHandY - world.lashOY
+
+
+// ---------------------------------------------------------------- the pack
+
+// one Eater: moves, bites, then once the whip kills it sinks into the snow and fades like in scene 8
+func Eater(a, s, st, x0, dy, mv, bites, dead, ph, k)
+  var x = x0 * 1.0
+  var fr = -1
+  var cut = false
+  for j = 0 .. mv.Count() / 4 - 1
+    var t0 = mv[j * 4]
+    var t1 = mv[j * 4 + 1]
+    ?mv[j * 4 + 2] = 0
+      x = Walk(st, t0, t1, x, mv[j * 4 + 3])
+      ?s >= t0 & s < t1
+        fr = s8.eWalk + (s / 4) % 4
+    :
+      x = x + mv[j * 4 + 3] * Out(st, t0, t1)
+      ?s >= t0 & s < t1
+        fr = s8.eWake + 3
+        cut = s < t0 + 3
+  ?fr < 0
+    for b : bites
+      ?s >= b & s < b + 22
+        fr = Seq(s - b, E_BITE, s8.eBite, 1)
+  ?fr < 0
+    var u = (s + ph) % 70
+    fr = s8.eBite + 13
+    ?u < 4 | (u >= 8 & u < 12)
+      fr = s8.eBite
+    :?u < 8
+      fr = s8.eBite + 1
+  ?s >= dead + 70
+    Show(a, false)
+    return
+  OnPath(a, x, s8.eW, s8.eH)
+  a.y = a.y + dy
+  a.color = GREEN
+  a.frame = fr
+  ?cut
+    a.color = "#ffffff"
+  ?s >= dead
+    var u = s - dead
+    a.frame = s8.eWake + IMax(0, 4 - u / 4)
+    a.color = color.Lerp(GREEN, GONE, Ramp(u - 25, 45))
+    Mote(k * 2, x + 5, a.y + camY + 2, u - 2, GREEN)
+    Mote(k * 2 + 1, x + 8, a.y + camY + 3, u - 9, GREEN)
+
+func Pack(s, st)
+  Eater(eaters[0], s, st, 56, -1, B_MV, B_BITES, 356, 31, 1)
+  Eater(eaters[1], s, st, 50, 0, A_MV, A_BITES, 276, 0, 0)
+  Eater(eaterC, s, st, 37, 0, C_MV, C_BITES, 426, 52, 2)
+
+
+// ---------------------------------------------------------------- the summit
+
+func Summit(s, st, sp)
+  var bx = math.RoundToInt(BodyX(st))
+  var n = bx - 60
+  // camera starts where scene 10 left it, then follows the body's cell so it never steps back
+  camX = IMax(60 - (cx - 14) + math.RoundToInt(n * 0.35), bx - (cx - 20))
+  camY = math.FloorToInt(Feet(60)) - (cy + 3)
+  var amp = ShakeNow()
+  ?amp > 0
+    var sx = [1, 0, -1, 0]
+    var sy = [0, 1, 0, -1]
+    var ph = f % 4
+    camY = camY + sy[ph]
+    camX = camX + sx[ph] * amp
+  var impact = ImpactNow()
+  var sea = cy - 3
+  pSky.x = -10 - math.RoundToInt(camX * 0.05)
+  var af = (f / 6) % 8
+  var cols = ["#136328", "#1f9a40", "#32da5a"]
+  for k = 0 .. 2
+    var a = aurora[k]
+    a.x = -20 - math.RoundToInt(camX * 0.08)
+    a.y = lb
+    a.frame = af
+    a.color = cols[k]
+  pFar.x = -10 - math.RoundToInt(camX * 0.25)
+  pFar.y = sea - hts.farSea
+  summit.x = 14 - math.RoundToInt(camX * 0.3)
+  summit.y = cy - 14
+  pBack.x = -20 - math.RoundToInt(camX * 0.6)
+  pBack.y = sea + 2 - math.RoundToInt((camY - (world.feet0 - (cy + 3))) * 0.6)
+  // mist drifts the same way the camera moves, otherwise it wobbles
+  mist.x = -math.RoundToInt(Wrap(30 + f / 20.0 + camX * 0.7, 360))
+  mist.y = sea + 3
+  mist2.x = mist.x + 360
+  mist2.y = sea + 3
+  near.x = -10 - math.RoundToInt(camX * 1.5)
+  near.y = H - 12
+  for k = 0 .. 9
+    var fl = flakes[k]
+    fl.x = math.RoundToInt(Wrap((k * 53) % 97 - f * 0.25 + math.Sin(f * 0.05 + k) * 1.5, W + 4)) - 2
+    fl.y = math.RoundToInt(Wrap((k * 37) % 33 + f * 0.18, H + 4)) - 2
+    fl.frame = k % 3
+    fl.color = "#9aa6ac"
+  Light(auroraGlow, jobs.Count() = 0 & !impact, cx, lb + 5)
+  Light(moonGlow, jobs.Count() = 0 & !impact, 9, 5)
+  fieldA.x = SX(0)
+  fieldA.y = SY(0)
+  fieldB.x = SX(120)
+  fieldB.y = SY(0)
+  crevasse.x = SX(art.crevX)
+  crevasse.y = SY(0)
+  snowLight.Update(glints, f, camX, camY, W, world.feet0, world.feet1, world.ww, 3, world.floorFront, [art.crevX0 - 2, art.crevX1 + 2], !impact)
+  cloud.x = SX(f * 0.015)
+  cloud.y = SY(Feet(60) + 7 + world.floorFront)
+  var bg = [pSky, moon, pFar, summit, pBack, mist, mist2, fieldA, fieldB, crevasse, cloud, near]
+  ShowAll(bg, !impact)
+  ShowAll(aurora, !impact)
+  ShowAll(flakes, !impact)
+
+  ShowAll(motes, false)
+  ShowAll(puffs, false)
+  ShowAll(hits, false)
+  ShowAll(bursts, false)
+  Controller(s, st)
+  Pack(s, st)
+  Body(s, st)
+  var r = math.FloorToInt(Feet(60))
+  // where the whip takes them
+  Hit(0, 52, r - 1, st - 264, "#ffffff")
+  Hit(1, 58, r - 2, st - 344, "#ffffff")
+  Hit(0, 52, r - 1, st - 414, "#ffffff")
+  // the blade through the whip
+  Burst(0, 67, r - 1, st - 614, SHINE)
+  Hit(1, 67, r, st - 614, SHINE)
+  for k = 0 .. 3
+    Mote(6 + k % 2, 65 + k * 2, r - 1, st - 616 - k * 3, GOLD)
+  // snow off his hooves as he's pushed, and at the edge
+  var px = CtrlX(st) + 16
+  for k = 0 .. 3
+    var t0 = T_PUSH + 10 + k * 16
+    Puff(k, px, Feet(px), Wrap(st - t0, 64))
+    ?st < T_PUSH + 10 | st >= T_EDGE
+      Show(puffs[k], false)
+  Puff(0, art.crevX0 + 4, Feet(art.crevX0), st - T_TIP - 4)
+
+
+// ---------------------------------------------------------------- the Ring
+
+// the empty Ring with the O on it, and his gray ghost pushing the cart round, hopping the lash
+func Ring(s, st, cut)
+  var lit = jobs.Count() = 0
+  camX = desc.ringCX - cx
+  camY = desc.viewCY - cy
+  rBack.x = ring.backX - camX
+  rBack.y = ring.backY - camY
+  rMain.x = -camX
+  rMain.y = -camY
+  rFront.x = ring.frontX - camX
+  rFront.y = ring.frontY - camY
+  rPost.x = SX(ring.postX)
+  rPost.y = SY(ring.postY)
+  rBend.frame = 1
+  rBend.x = SX(ring.bendX)
+  rBend.y = SY(ring.bendY)
+  rRock.x = SX(ring.rockX)
+  rRock.y = SY(ring.rockY)
+  var lv = (f / 3) % 4
+  rFlame.frame = lv
+  rFlame.x = SX(ring.lampX)
+  rFlame.y = SY(ring.lampY)
+  Light(rLantern[0], lit & lv < 3, SX(ring.lampX), SY(ring.lampY))
+  Light(rLantern[1], lit & lv = 3, SX(ring.lampX), SY(ring.lampY))
+  for k = 0 .. 2
+    var mo = rMotes[k]
+    mo.x = SX(ring.lampX + math.RoundToInt(math.Sin(f * 0.031 + k * 2.1) * 5))
+    mo.y = SY(ring.lampY - 1 + math.RoundToInt(math.Sin(f * 0.019 + k * 1.3) * 2))
+  for k = 0 .. 1
+    var rd = rDrips[k]
+    var ph = (f + k * 47) % 90
+    Show(rd, ph < 23)
+    rd.frame = IMin(22, ph)
+    rd.x = SX(82 + k * 54) - 1
+    rd.y = SY(121)
+  // the O, where it stopped
+  rHead.x = SX(116)
+  rHead.y = SY(139)
+  // the ghost pushing along the near straight, hopping the lash
+  var t0 = T_LAST
+  var x0 = 104.0
+  var hop = -1
+  ?cut >= 0
+    t0 = CUTS[cut * 2]
+    x0 = GHOST_X[cut]
+    hop = GHOST_HOP[cut]
+  var gx = x0 + 0.3 * (st - t0)
+  var col = GHOST
+  ?cut < 0
+    gx = IMin(113, math.RoundToInt(gx))
+    col = color.Lerp(GHOST, "#000000", Ramp(st - T_LAST - 50, 40))
+  var ix = math.RoundToInt(gx)
+  rCart.x = SX(ix) - 4
+  rCart.y = SY(139) - 2
+  rBody.x = SX(ix) - 7
+  rBody.y = SY(139) - 2
+  rBody.frame = (f / 5) % 4
+  ?cut < 0 & ix >= 113
+    rBody.frame = 3
+  ?hop >= 0 & st >= hop & st < hop + 14
+    rBody.frame = 4
+    rBody.y = rBody.y - 2
+    ?st < hop + 3 | st >= hop + 11
+      rBody.y = rBody.y + 1
+  Tint(rBodyLayers, col)
+  Tint(rCartLayers, color.Lerp(GHOST_CART, "#000000", Ramp(st - T_LAST - 50, 40)))
+  ?cut >= 0
+    Tint(rCartLayers, GHOST_CART)
+
+
+// ---------------------------------------------------------------- sounds
+
+// the summit only has the whip, the cut and his fall. the Ring has the cave, the cart and the crack
+func Sfx(sp, st, cut)
+  ?f = 0
+    ambient.Stop()
+    music.Stop()
+  for k = 0 .. 5
+    ?Cross(sp, st, WhipAt(k) + world.lashCrack)
+      play controller_whip_hit @PITCH[k]@
+  ?Cross(sp, st, 614)
+    play controller_whip_hit 120
+    play sword_hit 64
+  ?Cross(sp, st, T_TIP + 2)
+    play dominotaur_awake 70
+  ?Cross(sp, st, T_TIP + 50)
+    play mushroom_boss_fat_slam 45
+  // each cut to the Ring: cave, cart, and the crack as he hops
+  for k = 0 .. CUTS.Count() / 2 - 1
+    ?Cross(sp, st, CUTS[k * 2])
+      ambient.Add("ambient_cave")
+      play bomb_cart_move @52 + (k % 3) * 6@
+    ?Cross(sp, st, CUTS[k * 2 + 1])
+      ambient.Stop()
+    ?GHOST_HOP[k] >= 0 & Cross(sp, st, GHOST_HOP[k] + 7)
+      play controller_whip_hit 62
+  ?Cross(sp, st, T_LAST)
+    ambient.Add("ambient_cave")
+    play bomb_cart_move 50
+  ?Cross(sp, st, T_LAST + 30)
+    play pickup_stone 70
+
+
+// ---------------------------------------------------------------- the frame
+
+func Frame()
+  for c : allLights
+    c.x = OFF
+    c.w = 0
+  var st = Story(f + SKIP)
+  var sp = Story(f - 1 + SKIP)
+  var s = math.FloorToInt(st)
+  // summit or Ring
+  var cut = -1
+  for k = 0 .. CUTS.Count() / 2 - 1
+    ?s >= CUTS[k * 2] & s < CUTS[k * 2 + 1]
+      cut = k
+  var onRing = cut >= 0 | s >= T_LAST
+  summitPanel.x = OFF
+  ringPanel.x = OFF
+  ?onRing
+    ringPanel.x = 0
+    Ring(s, st, cut)
+  :
+    summitPanel.x = 0
+    Summit(s, st, sp)
+  card.color = Fade(T_CARD, T_CARD + 25, T_CARD_OUT, T_CARD_OUT + 25)
+  Show(card, f < T_CARD_OUT + 26)
+  // no fade at either end
+  ?onRing
+    SetShade(GRADE_RING)
+  :
+    SetShade(GRADE_H)
+  Sfx(sp, st, cut)
+
+
+// ---------------------------------------------------------------- the film calls these
+
+// the game draws every canvas cell even off screen, so they get no width while parked
+func Park()
+  parkW = []
+  for c : parkable
+    parkW.Add(c.w)
+    c.w = 0
+
+func Unpark()
+  for i = 0 .. parkable.Count() - 1
+    var c = parkable[i]
+    c.w = parkW[i]
+
+// built during the scene before so its lights are ready, parked off screen (ui.Remove would throw it away)
+func Warm()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+    root.x = OFF
+    parked = true
+    Park()
+    // building is heavy enough for one frame
+    return
+  RunJobs()
+
+func Update()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+  ?parked
+    root.x = 0
+    parked = false
+    Unpark()
+  ?!attached
+    ui.root.Add(root)
+    attached = true
+  RunJobs()
+  Frame()
+  ?f <= T_END
+    f++
+  :
+    over = true
+
+func Detach()
+  ?attached
+    ui.root.Remove(root)
+    attached = false
+
+func Reset()
+  f = 0
+  over = false

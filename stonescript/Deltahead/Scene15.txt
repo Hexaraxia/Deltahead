@@ -1,0 +1,662 @@
+// One must imagine the deltahead happy
+// Scene 15: He wears the ∆
+//
+// straight on from scene 14, no cut: he hops out into the Stream, it lifts him under the medallion,
+// looks him over and shakes him, his ∆ flares and the medallion answers, then on the music's second
+// hit (H2) he goes up out of the picture. the music is still scene 14's
+
+var art = import Deltahead/Art14Bridge
+var a15 = import Deltahead/Art15Rise
+var s7 = import Deltahead/Art7Sprites
+var hts = import Deltahead/Art7Heights
+var skyArt = import Deltahead/ArtSky
+var s8 = import Deltahead/Art8Sprites
+var look = import Deltahead/Look
+
+var G0 = 1081           // scene 14's frame count, so its streaks, lanterns and colors carry on
+var HX0 = 179           // where scene 14 left him: at the very edge
+var T_IN = 64           // he hops out over the gap into the light
+var HOP_T = 20
+var T_LIFT = 100        // it lifts him, a row every 6 frames
+var LIFT = 10
+var T_LOOK = 170        // the band of light down him
+var T_SHAKE = 205       // the game's shake
+var T_FLARE = 265       // his ∆ flares; the shimmer goes down him a row at a time
+var T_OK = 290          // the medallion answers
+var H2 = 351            // the music's second hit: he rises
+var CAM_END = -56       // where the camera stops in the sky
+var T_FADE = 581        // the music's last
+var T_END = 0
+// what the Stream still carries from scene 14 (the Delta and one of the silent): place in the flow, offset, height
+var FLOW_A = -28
+var CV_C = [174, 179]
+var CV_X = [-2, -2]
+var CV_H = [3, 3]
+// the streaks of light going up the beam, same as scene 14
+var ST_SEED = [3, 17, 29, 8, 41, 22, 35, 12, 47, 26, 5, 38, 19, 31, 44, 10, 24, 36, 14, 1]
+var ST_V = [0.6, 0.8, 0.5, 0.9, 0.7, 0.55, 0.85, 0.65, 0.75, 0.5, 0.95, 0.6, 0.8, 0.7, 0.9, 0.55, 0.7, 0.85, 0.6, 0.75]
+// the light round a ∆, cycling colors like the game's rainbow
+var HUE_R = [110, 112, 100, 45, 35, 40, 82, 106]
+var HUE_G = [42, 74, 100, 106, 96, 58, 42, 38]
+var HUE_B = [42, 30, 32, 48, 106, 116, 112, 88]
+// every color going out, step by step (how bright, out of 255: see Rainbow)
+var DRAIN = [255, 224, 196, 168, 140, 112, 88]
+var DELTA_C = "#rainFF"
+var BODY_GRAY = "#808080"
+var NORMAL = "#e0e0e0"
+var vig = []
+
+var f = 0
+var built = false
+var over = false
+var attached = false
+var parked = false
+var parkable = []       // its canvases, given no width while it waits (Park)
+var parkW = []
+var W = 0
+var H = 0
+var cx = 0
+var cy = 0
+var lb = 0
+var camX = 0
+var camY = 0
+var top = 0
+var hold = 0
+var skyK = 0.0
+var shadeCol = ""
+var invis = ui.AddStyle("#########")
+var OFF = -1000
+
+var root = null
+var backdrop = []
+var shade = []
+var bars = []
+var allLights = []
+var lightW = []          // each light's width (it has none while it's off)
+var jobs = []
+var pSky = null
+var moon = null
+var aurora = []
+var cloudA = null
+var cloudB = null
+var pFar = null
+var mist = null
+var mist2 = null
+var medal = null
+var bridgeA = null
+var bridgeB = null
+var flags = []
+var hero = null
+var head = null
+var heroB = null
+var headB = null
+var shim = []
+var frontA = null
+var sword = null          // his sword again, over the front railing so a hanger can't hide it
+var frontB = null
+var flames = []
+var burst = null
+var trail = []
+var streaks = []
+var conv = []
+var band = null
+var beamGlow = []
+var footGlow = null
+var lampGlow = []
+var headGlows = []
+var medalGlows = []
+var chestGlows = []
+
+
+// ---------------------------------------------------------------- building
+
+func Place(c, x, y)
+  c.anchor = "top_left"
+  c.dock = "top_left"
+  c.x = x
+  c.y = y
+
+func MakeAnim(layers, x, y)
+  ?layers[0].Count() > 2
+    return MakeGroup(layers, x, y)
+  var a = ui.AddAnim(layers[0][1])
+  root.Add(a)
+  Place(a, x, y)
+  a.color = layers[0][0]
+  ?layers.Count() > 1
+    for i = 1 .. layers.Count() - 1
+      var l = a.AddLayer(layers[i][1])
+      l.color = layers[i][0]
+  return a
+
+
+// a big piece as a see-through panel with one anim per color, each cut to its own cells, since the
+// game walks every cell of an anim's page whenever any of it shows. moved and shown like one anim
+func MakeGroup(layers, x, y)
+  var g = ui.AddPanel()
+  root.Add(g)
+  g.style = invis
+  Place(g, x, y)
+  for l : layers
+    var a = ui.AddAnim(l[1])
+    g.Add(a)
+    Place(a, l[2], l[3])
+    a.color = l[0]
+  return g
+
+func MakeCanvas(x, y, w, h, blend)
+  var c = ui.AddCanvas()
+  parkable.Add(c)
+  root.Add(c)
+  Place(c, x, y)
+  c.w = w
+  c.h = h
+  c.blend = blend
+  c.SetFG("#000000")
+  c.SetBG("#000000")
+  return c
+
+// Canvases top out at 100 x 27 cells, so screen-sized ones are tiled.
+func Tiles(blend, y0, rows)
+  var list = []
+  for j = 0 .. (rows - 1) / 27
+    for i = 0 .. (W - 1) / 100
+      var c = MakeCanvas(i * 100, y0 + j * 27, IMin(100, W - i * 100), IMin(27, rows - j * 27), blend)
+      list.Add(c)
+  return list
+
+func Solid(list)
+  for c : list
+    c.Set(" ")
+
+func MakeText(s)
+  var t = ui.AddText(s)
+  root.Add(t)
+  t.anchor = "center_center"
+  t.dock = "center_center"
+  t.x = 0
+  t.y = 0
+  t.w = string.Size(s) + 2
+  t.h = 1
+  t.align = "center"
+  t.color = "#000000"
+  return t
+
+// a light: an additive canvas fading out from the center, filled a few hundred cells a frame. off ones wait off screen
+func QueueHalo(w, h, r, g, b, bgk)
+  var c = MakeCanvas(OFF, 0, w, h, "add")
+  jobs.Add([c, w, h, r, g, b, bgk, 0])
+  allLights.Add(c)
+  lightW.Add(w)
+  c.w = 0
+  return c
+
+func RunJobs()
+  look.Run()
+  ?jobs.Count() = 0
+    return
+  var j = jobs[0]
+  var total = j[1] * j[2]
+  var last = IMin(total - 1, j[7] + 150)
+  var hx = (j[1] - 1) / 2.0
+  var hy = (j[2] - 1) / 2.0
+  for i = j[7] .. last
+    var x = i % j[1]
+    var y = i / j[1]
+    var dx = (x - hx) / (hx + 0.5)
+    var dy = (y - hy) / (hy + 0.5)
+    var k = 1.0 - math.Sqrt(dx * dx + dy * dy)
+    ?k > 0
+      k = k * k
+      j[0].SetFG(x, y, color.FromRGB(math.RoundToInt(j[3] * k), math.RoundToInt(j[4] * k), math.RoundToInt(j[5] * k)))
+      j[0].SetBG(x, y, color.FromRGB(math.RoundToInt(j[3] * k * j[6]), math.RoundToInt(j[4] * k * j[6]), math.RoundToInt(j[5] * k * j[6])))
+  j[7] = last + 1
+  ?j[7] >= total
+    jobs.RemoveAt(0)
+
+func Build()
+  built = true
+  W = screen.w
+  H = screen.h
+  cx = W / 2
+  cy = H / 2
+  lb = IMax(2, H / 12)
+  camX = art.beamX - (cx + 8)
+  top = art.feet - (cy + 5)
+  camY = top
+  hold = art.feet - LIFT - 2 - top
+  skyK = 20.0 / (top - CAM_END)
+  // no fade: on the music's last, straight to the mountain from far off (scene 16)
+  T_END = T_FADE
+  disable hud
+  disable player
+  disable banner
+  storage.Set("hidHud", true)
+
+  root = ui.AddPanel()
+  root.style = invis
+  root.anchor = "top_left"
+  root.dock = "top_left"
+  root.x = 0
+  root.y = 0
+  root.w = W
+  root.h = H
+  attached = true
+
+  // back to front, like scene 14: sky, aurora, clouds and far ranges, the bridge, him behind the front railing,
+  // the Stream, him again in the light with his shimmer and trail, the band, lights, shade, bars and words
+  backdrop = Tiles("opaque", 0, H)
+  Solid(backdrop)
+  pSky = MakeAnim(skyArt.sky, 0, -20)
+  moon = MakeAnim(skyArt.moon, 4, 2)
+  aurora.Add(MakeAnim(s7.auroraLo, 0, 0))
+  aurora.Add(MakeAnim(s7.auroraMid, 0, 0))
+  aurora.Add(MakeAnim(s7.auroraHi, 0, 0))
+  cloudA = MakeAnim(s7.cloud, 0, 0)
+  cloudB = MakeAnim(s7.cloud, 0, 0)
+  pFar = MakeAnim(hts.far, 0, 0)
+  mist = MakeAnim(s7.mist, 0, 0)
+  mist2 = MakeAnim(s7.mist, 0, 0)
+  bridgeA = MakeAnim(art.bridgeA, 0, 0)
+  bridgeB = MakeAnim(art.bridgeB, 0, 0)
+  for i = 0 .. art.flagX.Count() - 1
+    flags.Add(MakeAnim(art.flag, 0, 0))
+  medal = MakeAnim([[DELTA_C, "∆"]], 0, 0)
+  hero = MakeAnim(art.hero, 0, 0)
+  head = MakeAnim([[DELTA_C, "∆"]], 0, 0)
+  frontA = MakeAnim(art.frontA, 0, 0)
+  frontB = MakeAnim(art.frontB, 0, 0)
+  for i = 0 .. art.lampX.Count() - 1
+    flames.Add(MakeAnim(art.flame, 0, 0))
+  for i = 0 .. ST_SEED.Count() - 1
+    streaks.Add(MakeAnim(art.streak, 0, 0))
+  conv.Add(MakeAnim(art.fig4, 0, 0))
+  conv.Add(MakeAnim(art.chest9, 0, 0))
+  // him again, in front of the streaks once he's past the end post and in the light. the sword
+  // gets redrawn too, it's one cell wide and anything in front of it hides it
+  sword = MakeAnim(art.heroSword, 0, 0)
+  heroB = MakeAnim(art.hero, 0, 0)
+  headB = MakeAnim([[DELTA_C, "∆"]], 0, 0)
+  shim.Add(MakeAnim(a15.rowA, 0, 0))
+  shim.Add(MakeAnim(a15.rowB, 0, 0))
+  shim.Add(MakeAnim(a15.rowC, 0, 0))
+  burst = MakeAnim(s8.burst, 0, 0)
+  for i = 0 .. 3
+    trail.Add(MakeAnim(art.streak, 0, 0))
+  band = MakeAnim(a15.band, 0, 0)
+  beamGlow.Add(QueueHalo(19, 27, 50, 124, 78, 0.16))
+  beamGlow.Add(QueueHalo(19, 27, 60, 140, 90, 0.18))
+  beamGlow.Add(QueueHalo(19, 27, 50, 124, 78, 0.16))
+  beamGlow.Add(QueueHalo(19, 27, 50, 124, 78, 0.16))
+  beamGlow.Add(QueueHalo(19, 27, 40, 104, 64, 0.14))
+  footGlow = QueueHalo(11, 3, 70, 150, 100, 0.2)
+  for i = 0 .. art.lampX.Count() - 1
+    lampGlow.Add(QueueHalo(15, 7, 140, 96, 38, 0.16))
+  for k = 0 .. 7
+    headGlows.Add(QueueHalo(13, 5, HUE_R[k] * 5 / 4, HUE_G[k] * 5 / 4, HUE_B[k] * 5 / 4, 0.16))
+  for k = 0 .. 7
+    medalGlows.Add(QueueHalo(15, 7, HUE_R[k], HUE_G[k], HUE_B[k], 0.16))
+  for k = 0 .. 7
+    chestGlows.Add(QueueHalo(15, 7, HUE_R[k], HUE_G[k], HUE_B[k], 0.14))
+
+  shade = Tiles("multiply", 0, H)
+  vig = look.Vignette(root, W, H, 0.35)
+  for c : vig
+    parkable.Add(c)
+  for c : Tiles("opaque", 0, lb)
+    bars.Add(c)
+  for c : Tiles("opaque", H - lb, lb)
+    bars.Add(c)
+  Solid(bars)
+
+
+// ---------------------------------------------------------------- helpers
+
+// the game's rainbow at brightness b out of 255, worked out here since #rain always draws at full.
+// hue goes round every 2.5 s, halfway to white like the game's
+func Rainbow(b)
+  var h = 6.0 - (f % 75) * 0.08
+  var k = math.FloorToInt(h) % 6
+  var t = h - math.FloorToInt(h)
+  var r = 1.0
+  var g = t
+  var bl = 0.0
+  ?k = 1
+    r = 1.0 - t
+    g = 1.0
+  :?k = 2
+    r = 0.0
+    g = 1.0
+    bl = t
+  :?k = 3
+    r = 0.0
+    g = 1.0 - t
+    bl = 1.0
+  :?k = 4
+    r = t
+    g = 0.0
+    bl = 1.0
+  :?k = 5
+    r = 1.0
+    g = 0.0
+    bl = 1.0 - t
+  return color.FromRGB(math.RoundToInt((0.5 + r * 0.5) * b), math.RoundToInt((0.5 + g * 0.5) * b), math.RoundToInt((0.5 + bl * 0.5) * b))
+
+func IMin(a, b)
+  ?a < b
+    return a
+  return b
+
+func IMax(a, b)
+  ?a > b
+    return a
+  return b
+
+func Prog(a, b)
+  return math.Clamp((f - a) * 1.0 / (b - a), 0.0, 1.0)
+
+func SetShade(col)
+  ?!string.Equals(col, shadeCol)
+    shadeCol = col
+    for c : shade
+      c.SetFG(col)
+      c.SetBG(col)
+
+func Wrap(v, m)
+  return v - math.Floor(v / m) * m
+
+func Show(c, on)
+  c.visible = on
+
+// an off light gets no width too, the game draws every canvas wherever it is (its cells stay filled)
+func Light(c, on, x, y)
+  ?on
+    var w = lightW[allLights.IndexOf(c)]
+    c.w = w
+    c.x = x - w / 2
+    c.y = y - c.h / 2
+  :
+    c.x = OFF
+    c.w = 0
+
+func SX(x)
+  return math.RoundToInt(x - camX)
+
+func SY(y)
+  return math.RoundToInt(y - camY)
+
+// scene 14's clock, for what carries on from it
+func G()
+  return G0 + f
+
+// which color a ∆'s light is on
+func Hue()
+  return (G() / 10) % 8
+
+// how far he's gone up since the hit: slowly, then faster and faster
+func Risen()
+  var t = f - H2
+  ?t < 0
+    return 0
+  return math.FloorToInt(t / 6.0 + 0.015 * t * t)
+
+// the row his feet are on
+func Feet()
+  return art.feet - IMin(LIFT, IMax(0, (f - T_LIFT) / 6)) - Risen()
+
+// a rainbow going down him: on for a while, then going out
+func Shimmer(a, t0, x, y)
+  var u = f - t0
+  Show(a, u >= 0 & u < 24 + 21)
+  a.x = x
+  a.y = y
+  ?u < 24
+    a.color = DELTA_C
+  :
+    a.color = Rainbow(DRAIN[IMin(6, (u - 24) / 3)])
+
+
+// ---------------------------------------------------------------- him
+
+// at the edge, out into the light, lifted, looked over and shaken, the shimmer, then up
+func Him()
+  var hx = HX0
+  var fr = 4
+  var dy = 0
+  ?f >= T_IN & f < T_IN + HOP_T
+    var hop = (f - T_IN) * 1.0 / HOP_T
+    hx = math.RoundToInt(HX0 + (art.beamX - HX0) * hop)
+    dy = -math.RoundToInt(3.0 * math.Sin(hop * 3.1416))
+    fr = 6
+  :?f >= T_IN + HOP_T
+    hx = art.beamX
+  var jx = 0
+  ?f >= T_SHAKE & f < T_SHAKE + a15.jig.Count()
+    jx = a15.jig[f - T_SHAKE]
+  var feet = Feet()
+  var inLight = hx >= art.gapX0 + 2
+  var b = hero
+  var h = head
+  ?inLight
+    b = heroB
+    h = headB
+  b.x = SX(hx) - 1 + jx
+  b.y = SY(feet) - 3 + dy
+  b.frame = fr
+  h.x = b.x + art.headX[fr]
+  h.y = b.y + art.headY[fr]
+  h.color = DELTA_C
+  var lit = jobs.Count() = 0
+  var seen = h.y > -2
+  Show(hero, seen & !inLight)
+  Show(sword, seen & !inLight)
+  sword.x = b.x
+  sword.y = b.y
+  sword.frame = fr
+  Show(head, seen & !inLight)
+  Show(heroB, seen & inLight)
+  Show(headB, seen & inLight)
+  ?lit & seen
+    Light(headGlows[Hue()], true, h.x, h.y)
+  // the light holding him up, once he's out over the gap, until he goes
+  Light(footGlow, lit & hx >= art.gapX0 + 1 & f < H2, SX(art.beamX), b.y + 4)
+  // the shimmer, his ∆ first, then a row at a time down him
+  Shimmer(shim[0], T_FLARE + 4, b.x, b.y)
+  Shimmer(shim[1], T_FLARE + 10, b.x, b.y)
+  Shimmer(shim[2], T_FLARE + 16, b.x, b.y)
+  var u = f - T_FLARE
+  ?f >= H2
+    u = f - H2
+  Show(burst, u >= 0 & u < 12 & seen)
+  burst.x = h.x - 4
+  burst.y = h.y - 2
+  burst.frame = IMin(2, IMax(0, u) / 4)
+  burst.color = DELTA_C
+  // going up, the colors left behind him
+  var r = Risen()
+  for k = 0 .. trail.Count() - 1
+    var s = trail[k]
+    Show(s, r > k * 2 + 1 & b.y + 4 + k * 2 < H)
+    s.x = SX(art.beamX)
+    s.y = b.y + 4 + k * 2
+    s.frame = (f / 3 + k) % 3
+    s.color = Rainbow(DRAIN[IMin(6, k * 2)])
+
+
+// ---------------------------------------------------------------- the Stream
+
+func Stream()
+  var lit = jobs.Count() = 0
+  var bx = SX(art.beamX)
+  Light(beamGlow[0], lit, bx, SY(38))
+  Light(beamGlow[1], lit, bx, SY(12))
+  Light(beamGlow[2], lit, bx, SY(-14))
+  Light(beamGlow[3], lit, bx, SY(-40))
+  Light(beamGlow[4], lit, bx, SY(-66))
+  // the streaks, up the picture
+  for k = 0 .. streaks.Count() - 1
+    var s = streaks[k]
+    s.x = bx - art.beamW / 2 + (k * 5) % art.beamW
+    s.y = math.RoundToInt(Wrap(ST_SEED[k] - G() * ST_V[k], H + 4)) - 2
+    s.frame = (k + G() / 6) % 3
+    s.color = "#c8ffd8"
+    ?k % 3 = 1
+      s.color = "#5ab07a"
+  // what it still carries, going on up
+  var dOn = false
+  for i = 0 .. conv.Count() - 1
+    var a = conv[i]
+    var y = FLOW_A + CV_C[i] - (G() - 240) / 6
+    var on = SY(y) < H & SY(y) + CV_H[i] > 0
+    Show(a, on)
+    a.x = bx + CV_X[i]
+    a.y = SY(y)
+    ?i = 1
+      dOn = on
+  conv[0].color = BODY_GRAY
+  var d = conv[1]
+  d.color = DELTA_C
+  ?lit & dOn
+    Light(chestGlows[Hue()], true, d.x + 2, d.y + 1)
+  // the band of light it looks him over with, head to feet
+  var u = f - T_LOOK
+  Show(band, u >= 0 & u < 36)
+  band.x = bx - 4
+  band.y = SY(art.feet - LIFT - 4 + u / 5)
+
+
+// ---------------------------------------------------------------- ours
+
+// the bridge: lanterns flickering, pennants stirring, the medallion's ∆ answering his
+func Ours()
+  var lit = jobs.Count() = 0
+  for k = 0 .. flames.Count() - 1
+    var fl = flames[k]
+    fl.x = SX(art.lampX[k])
+    fl.y = SY(art.lampY[k])
+    fl.frame = ((G() + k * 5) / 4) % 4
+    Light(lampGlow[k], lit & fl.x > -6 & fl.x < W + 6 & fl.y > -3 & fl.y < H + 3, fl.x, fl.y)
+  for k = 0 .. flags.Count() - 1
+    var g = flags[k]
+    g.x = SX(art.flagX[k])
+    g.y = SY(art.flagY[k])
+    g.frame = ((G() + k * 7) / 8) % 4
+  medal.x = SX(art.medalX)
+  medal.y = SY(art.medalY)
+  medal.color = DELTA_C
+  Light(medalGlows[Hue()], lit & f >= T_OK & f < H2 + 20, medal.x, medal.y)
+
+
+// ---------------------------------------------------------------- sounds
+
+// the music is still scene 14's. the lift, the shake, the shimmer, the rush as he goes
+func Sfx()
+  ?f = T_IN
+    play quest_stone_jump 92
+  :?f = T_LIFT
+    play mindstone_on 80
+  :?f = T_SHAKE
+    play fissure_unmake 85
+  :?f = T_FLARE
+    play treasure_item_rainbow 100
+  :?f = H2
+    play bell_ringer_attack 90
+
+
+// ---------------------------------------------------------------- the frame
+
+func Frame()
+  for c : allLights
+    c.x = OFF
+    c.w = 0
+  // the camera stays on the deck till he goes up, then follows him till it stops in the sky
+  camY = IMax(CAM_END, IMin(top, Feet() - 2 - hold))
+  var down = camY - top
+  var sk = math.RoundToInt(down * skyK)
+  pSky.x = -10 - math.RoundToInt(camX * 0.05)
+  pSky.y = -20 - sk
+  moon.y = 2 - math.RoundToInt(down * skyK * 0.4)
+  var af = (G() / 6) % 8
+  var cols = ["#136328", "#1f9a40", "#32da5a"]
+  for k = 0 .. 2
+    var a = aurora[k]
+    a.x = -20 - math.RoundToInt(camX * 0.08)
+    a.y = lb - math.RoundToInt(down * skyK * 0.6)
+    a.frame = af
+    a.color = cols[k]
+  cloudA.x = SX(-100)
+  cloudA.y = SY(36)
+  cloudB.x = SX(-160)
+  cloudB.y = SY(46)
+  pFar.x = -10 - math.RoundToInt(camX * 0.25)
+  pFar.y = SY(28)
+  mist.x = -math.RoundToInt(Wrap(30 + G() / 20.0 + camX * 0.5, 360))
+  mist.y = SY(31)
+  mist2.x = mist.x + 360
+  mist2.y = mist.y
+  bridgeA.x = SX(0)
+  bridgeA.y = SY(art.top)
+  bridgeB.x = SX(art.half)
+  bridgeB.y = SY(art.top)
+  frontA.x = SX(0)
+  frontA.y = SY(art.top)
+  frontB.x = SX(art.half)
+  frontB.y = SY(art.top)
+  Ours()
+  Stream()
+  Him()
+  SetShade(NORMAL)
+  Sfx()
+
+
+// ---------------------------------------------------------------- the film calls these
+
+// a scene built ahead waits off to the side, but the game still draws its canvases there, so no width till it's on
+func Park()
+  parkW = []
+  for c : parkable
+    parkW.Add(c.w)
+    c.w = 0
+
+func Unpark()
+  for i = 0 .. parkable.Count() - 1
+    var c = parkable[i]
+    c.w = parkW[i]
+
+// built ahead while scene 14 is on so its lights are ready. it waits off to the side, ui.Remove would recycle it
+func Warm()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+    root.x = OFF
+    parked = true
+    Park()
+    // nothing more on the frame it's built in, that's heavy enough
+    return
+  RunJobs()
+
+func Update()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+  ?parked
+    root.x = 0
+    parked = false
+    Unpark()
+  RunJobs()
+  Frame()
+  ?f <= T_END
+    f++
+  :
+    over = true
+
+func Detach()
+  ?attached
+    ui.root.Remove(root)
+    attached = false
+
+func Reset()
+  f = 0
+  over = false

@@ -1,0 +1,53 @@
+// preview only (not in the package): scene 13 into Act 4 (14 to 17) the way Main does it, each scene built
+// ahead and cutting straight in. the simulator runs it instead of Main, render from frame 500 (end of 13)
+
+var film13 = new Deltahead/Scene13
+var film14 = null
+var film15 = null
+var film16 = null
+var film17 = null
+var part = 13
+
+?string.Equals(loc.id, "waterfall")
+  ?part = 13
+    film13.Update()
+    ?film13.f >= film13.T_END - 90
+      ?film14 = null
+        film14 = new Deltahead/Scene14
+      film14.Warm()
+    ?film13.over
+      film13.Detach()
+      part = 14
+      film14.Update()
+  :?part = 14
+    film14.Update()
+    ?film14.f >= 900
+      ?film15 = null
+        film15 = new Deltahead/Scene15
+      film15.Warm()
+    ?film14.over
+      film14.Detach()
+      part = 15
+      film15.Update()
+  :?part = 15
+    film15.Update()
+    ?film15.f >= film15.T_END - 90
+      ?film16 = null
+        film16 = new Deltahead/Scene16
+      film16.Warm()
+    ?film15.over
+      film15.Detach()
+      part = 16
+      film16.Update()
+  :?part = 16
+    film16.Update()
+    ?film16.f >= film16.T_END - 150
+      ?film17 = null
+        film17 = new Deltahead/Scene17
+      film17.Warm()
+    ?film16.over
+      film16.Detach()
+      part = 17
+      film17.Update()
+  :
+    film17.Update()

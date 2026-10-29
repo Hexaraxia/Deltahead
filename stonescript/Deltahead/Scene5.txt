@@ -1,0 +1,914 @@
+// One must imagine the deltahead happy
+// Scene 5: The Perilous Climb
+//
+// up the cliff through the cloud past fallen Pushers. he pockets a runestone, hops the
+// Dominotaur's lash, the stairs give way behind him, and on the ridge he looks up.
+// everything runs off one frame counter, 30 a second
+
+var spr2 = import Deltahead/Art2Sprites
+var spr4 = import Deltahead/Art4Sprites
+var world = import Deltahead/Art5Climb
+// place name and stars, like the game's
+var banner = new Deltahead/Banner
+var spr = import Deltahead/Art5Sprites
+var spr3 = import Deltahead/Art3Sprites
+var look = import Deltahead/Look
+// flashes and shake options. no comment on an import line or the game can't read the file
+var opt = import Deltahead/Options
+
+// timing, in frames (the rest are set in Build)
+var T_CARD = 20
+var T_CARD_OUT = 130
+var T_WALK = 40         // he steps out of the tunnel
+var V = 0.4             // his pace, stairs count three per row climbed
+var OMEGA_SEG = 3       // Omega chest landing, he stops at its end
+var OMEGA_T = 130
+var COLLAPSE_SEG = 7    // the stairs that give way behind him
+var COLLAPSE_T = 90     // he stops, and looks back
+var BLOCK_X = 80        // where the Dominotaur stops, at the foot of what's left
+var T_COLLAPSE = 0
+var T_ARRIVE = 0        // the Dominotaur gets there
+var LASH_SEG = 0        // the ledge the lash reaches him on (set in Build)
+var LASH_AT_X = 62      // and how far along it he is
+var D_STOP = 0          // where the Dominotaur stops to lash (set in Build)
+var T_OMEGA = 0
+var T_LASH = 0
+var T_D1 = 0            // the Dominotaur comes into sight
+var T_TOP = 0           // on the crest
+var T_END = 0
+
+var segT = []           // when he starts each stretch of the trail
+var segD = []           // how long he walks it
+
+var f = 0
+var built = false
+var over = false
+var attached = false
+var parked = false
+var parkable = []       // its canvases, given no width while it waits (Park)
+var parkW = []
+var W = 0
+var H = 0
+var cx = 0
+var cy = 0
+var camX = 0
+var camY = 0
+var lastCol = 0
+var SUMMIT_CAM = 0
+var heroX = 0.0
+var heroY = 0.0
+var heroLeft = false
+var heroMoving = false
+var shadeCol = ""
+var invis = ui.AddStyle("#########")
+var OFF = -1000
+
+var root = null
+var backdrop = []
+var shade = []
+var bars = []
+var card = null
+var pSky = null
+var pTop = null
+var pBot = null
+var pFront = null
+var pNear = null
+var gusts = []
+var omega = null
+var heart = null
+var rune = null
+var heroR = null
+var heroL = null
+// his layers and their colors, to bring him up out of the tunnel's dark: [[layer, color], ...]
+var heroRL = []
+var heroLL = []
+var lookUp = null
+var dominoR = null
+var dominoL = null
+var dLash = null
+var gone = null
+var chunks = []
+var cdust = []
+var twinkles = []
+var dominoSR = null
+var dominoSL = null
+var spark = null
+var fogBack = []
+var fogFront = []
+var flakes = []
+var flurry = []
+var moonGlow = null
+var himGlow = null
+var breath = null
+var vig = []
+var glowX = 0.0         // where he is, for the light that follows him
+var glowY = 0.0
+var allLights = []
+var lightW = []          // each light's width (it has none while it's off)
+var jobs = []
+
+var FOG_Y = [4, 13, 22, 9, 18, 27]
+var FOG_X = [0, 37, 71, 19, 55, 88]
+var FOG_V = [0.08, -0.06, 0.1, 0.16, -0.12, 0.2]
+var SHADOW = "#1a1d20"   // the Dominotaur in the fog, before he's close
+
+
+// ---------------------------------------------------------------- building
+
+func Place(c, x, y)
+  c.anchor = "top_left"
+  c.dock = "top_left"
+  c.x = x
+  c.y = y
+
+func MakeAnim(layers, x, y)
+  var a = ui.AddAnim(layers[0][1])
+  root.Add(a)
+  Place(a, x, y)
+  a.color = layers[0][0]
+  ?layers.Count() > 1
+    for i = 1 .. layers.Count() - 1
+      var l = a.AddLayer(layers[i][1])
+      l.color = layers[i][0]
+  return a
+
+// MakeAnim, but it and its layers go into out with their colors so they can be faded
+func MakeFaded(layers, out)
+  var a = ui.AddAnim(layers[0][1])
+  root.Add(a)
+  Place(a, 0, 0)
+  a.color = layers[0][0]
+  out.Add([a, layers[0][0]])
+  ?layers.Count() > 1
+    for i = 1 .. layers.Count() - 1
+      var l = a.AddLayer(layers[i][1])
+      l.color = layers[i][0]
+      out.Add([l, layers[i][0]])
+  return a
+
+func MakeCanvas(x, y, w, h, blend)
+  var c = ui.AddCanvas()
+  parkable.Add(c)
+  root.Add(c)
+  Place(c, x, y)
+  c.w = w
+  c.h = h
+  c.blend = blend
+  c.SetFG("#000000")
+  c.SetBG("#000000")
+  return c
+
+// canvases max out at 100x27, so screen-sized ones are tiled
+func Tiles(blend, y0, rows)
+  var list = []
+  for j = 0 .. (rows - 1) / 27
+    for i = 0 .. (W - 1) / 100
+      var c = MakeCanvas(i * 100, y0 + j * 27, IMin(100, W - i * 100), IMin(27, rows - j * 27), blend)
+      list.Add(c)
+  return list
+
+func Solid(list)
+  for c : list
+    c.Set(" ")
+
+func MakeText(s)
+  var t = ui.AddText(s)
+  root.Add(t)
+  t.anchor = "center_center"
+  t.dock = "center_center"
+  t.x = 0
+  t.y = 0
+  t.w = string.Size(s) + 2
+  t.h = 1
+  t.align = "center"
+  t.color = "#000000"
+  return t
+
+// a light: additive canvas fading out from the center, filled a few hundred cells a frame.
+// canvases get drawn even when hidden, so a light that's off waits off screen (see Light)
+func QueueHalo(w, h, r, g, b, bgk)
+  var c = MakeCanvas(OFF, 0, w, h, "add")
+  jobs.Add([c, w, h, r, g, b, bgk, 0])
+  allLights.Add(c)
+  lightW.Add(w)
+  c.w = 0
+  return c
+
+func RunJobs()
+  look.Run()
+  ?jobs.Count() = 0
+    return
+  var j = jobs[0]
+  var total = j[1] * j[2]
+  var last = IMin(total - 1, j[7] + 150)
+  var hx = (j[1] - 1) / 2.0
+  var hy = (j[2] - 1) / 2.0
+  for i = j[7] .. last
+    var x = i % j[1]
+    var y = i / j[1]
+    var dx = (x - hx) / (hx + 0.5)
+    var dy = (y - hy) / (hy + 0.5)
+    var k = 1.0 - math.Sqrt(dx * dx + dy * dy)
+    ?k > 0
+      k = k * k
+      j[0].SetFG(x, y, color.FromRGB(math.RoundToInt(j[3] * k), math.RoundToInt(j[4] * k), math.RoundToInt(j[5] * k)))
+      j[0].SetBG(x, y, color.FromRGB(math.RoundToInt(j[3] * k * j[6]), math.RoundToInt(j[4] * k * j[6]), math.RoundToInt(j[5] * k * j[6])))
+  j[7] = last + 1
+  ?j[7] >= total
+    jobs.RemoveAt(0)
+
+// when he starts each stretch of the trail, and how long it takes him
+func Schedule()
+  var t = T_WALK
+  for i = 0 .. world.pathX.Count() - 2
+    var dx = math.Abs(world.pathX[i + 1] - world.pathX[i])
+    var dy = math.Abs(world.pathY[i + 1] - world.pathY[i])
+    var len = dx
+    ?dy * 2 > dx
+      len = dx + dy * 3
+    segT.Add(t)
+    var d = math.CeilToInt(len / V)
+    segD.Add(d)
+    t = t + d
+    ?i = OMEGA_SEG
+      T_OMEGA = t
+      t = t + OMEGA_T
+    :?i = COLLAPSE_SEG
+      T_COLLAPSE = t + 2
+      t = t + COLLAPSE_T
+  T_TOP = t
+  var c = LASH_SEG
+  T_LASH = segT[c] + math.CeilToInt((LASH_AT_X - world.pathX[c]) * 1.0 / (world.pathX[c + 1] - world.pathX[c]) * segD[c])
+  T_D1 = T_LASH - 180
+  T_ARRIVE = T_LASH + 50 + math.CeilToInt((BLOCK_X - D_STOP) / 0.4)
+  // a while looking up, then scene 6 cuts to the mine
+  T_END = T_TOP + 200
+
+func Build()
+  built = true
+  W = screen.w
+  H = screen.h
+  cx = W / 2
+  cy = H / 2
+  camX = 55 - cx
+  // on the crest: him above the far horizon, against the sky
+  SUMMIT_CAM = world.crestRow - H + 12
+  LASH_SEG = spr.lashSeg
+  D_STOP = spr.dStop
+  Schedule()
+  disable hud
+  disable player
+  disable banner
+  storage.Set("hidHud", true)
+
+  root = ui.AddPanel()
+  root.style = invis
+  root.anchor = "top_left"
+  root.dock = "top_left"
+  root.x = 0
+  root.y = 0
+  root.w = W
+  root.h = H
+  attached = true
+
+  // back to front: sky, fog, cliff, chest, the Dominotaur and his lash, him, fog, snow,
+  // near rock, then lights, shade, bars and words
+  backdrop = Tiles("opaque", 0, H)
+  Solid(backdrop)
+  pSky = MakeAnim(world.sky, 0, 0)
+  for i = 0 .. 9
+    twinkles.Add(MakeAnim(spr.twinkle, 0, 0))
+  for i = 0 .. 2
+    fogBack.Add(MakeAnim(spr.fog, 0, 0))
+  pTop = MakeAnim(world.midTop, 0, 0)
+  pBot = MakeAnim(world.midBot, 0, 0)
+  gone = MakeAnim(world.gone, 0, 0)
+  for i = 0 .. 1
+    cdust.Add(MakeAnim(spr.cdust, 0, 0))
+  for i = 0 .. 8
+    chunks.Add(MakeAnim(spr.chunk, 0, 0))
+  omega = MakeAnim(spr.omega, 0, 0)
+  heart = MakeAnim(spr4.heart, 0, 0)
+  dLash = MakeAnim(spr.dLash, 0, 0)
+  dominoR = MakeAnim(spr.dominoR, 0, 0)
+  dominoL = MakeAnim(spr.dominoL, 0, 0)
+  dominoSR = MakeAnim(spr.dominoSR, 0, 0)
+  dominoSL = MakeAnim(spr.dominoSL, 0, 0)
+  spark = MakeAnim(spr2.spark, 0, 0)
+  heroR = MakeFaded(spr2.heroR, heroRL)
+  heroL = MakeFaded(spr2.heroL, heroLL)
+  lookUp = MakeAnim(spr.lookUp, 0, 0)
+  rune = MakeAnim(spr.rune, 0, 0)
+  breath = MakeAnim(spr3.mote, OFF, 0)
+  for i = 0 .. 2
+    fogFront.Add(MakeAnim(spr.fog, 0, 0))
+  for i = 0 .. 13
+    flakes.Add(MakeAnim(spr.flake, 0, 0))
+  pFront = MakeAnim(world.front, 0, 0)
+  pNear = MakeAnim(world.near, 0, 0)
+  // the opening flurry, carrying on scene 4's draught (half are streaks, too fast to see as flakes)
+  for i = 0 .. 15
+    ?i % 2 = 0
+      flurry.Add(MakeAnim([["#eef3f6", "-"]], OFF, 0))
+    :
+      flurry.Add(MakeAnim(spr.flake, OFF, 0))
+  for i = 0 .. 2
+    gusts.Add(MakeAnim(spr.gust, 0, 0))
+
+  moonGlow = QueueHalo(25, 11, 34, 38, 46, 0.12)
+  // a little cold light on him, so the eye finds him on the gray cliff
+  himGlow = QueueHalo(15, 9, 36, 40, 50, 0.1)
+
+  shade = Tiles("multiply", 0, H)
+  vig = look.Vignette(root, W, H, 0.35)
+  for c : vig
+    parkable.Add(c)
+  var lb = IMax(2, H / 12)
+  for c : Tiles("opaque", 0, lb)
+    bars.Add(c)
+  for c : Tiles("opaque", H - lb, lb)
+    bars.Add(c)
+  Solid(bars)
+  card = MakeText("Most of us who tried the climb fell.")
+  banner.Build(root, "The Perilous Climb", 8, 13, T_CARD_OUT + 40, lb + 1)
+
+
+// ---------------------------------------------------------------- helpers
+
+func IMin(a, b)
+  ?a < b
+    return a
+  return b
+
+func IMax(a, b)
+  ?a > b
+    return a
+  return b
+
+func Prog(a, b)
+  return math.Clamp((f - a) * 1.0 / (b - a), 0.0, 1.0)
+
+func Fade(a, b, c, d)
+  return color.Lerp("#000000", "#e7e3da", Prog(a, b) - Prog(c, d))
+
+func Wrap(v, m)
+  return v - math.Floor(v / m) * m
+
+func SetShade(col)
+  ?!string.Equals(col, shadeCol)
+    shadeCol = col
+    for c : shade
+      c.SetFG(col)
+      c.SetBG(col)
+
+func Show(c, on)
+  c.visible = on
+
+func ShowAll(list, on)
+  for c : list
+    c.visible = on
+
+// on its source this frame, or off screen with no width (the game draws every canvas, hidden or not)
+func Light(c, on, x, y)
+  ?on
+    var w = lightW[allLights.IndexOf(c)]
+    c.w = w
+    c.x = x - w / 2
+    c.y = y - c.h / 2
+  :
+    c.x = OFF
+    c.w = 0
+
+// cliff cell -> screen
+func SX(x)
+  return math.RoundToInt(x - camX)
+
+func SY(y)
+  return math.RoundToInt(y - camY)
+
+// the row his feet are on, anywhere along a stretch of the trail
+func FeetOn(i, x)
+  var x0 = world.pathX[i]
+  var x1 = world.pathX[i + 1]
+  ?x0 = x1
+    return world.pathY[i]
+  return world.pathY[i] + (world.pathY[i + 1] - world.pathY[i]) * (x - x0) * 1.0 / (x1 - x0)
+
+// where he is on the trail now
+func Walk()
+  heroMoving = false
+  var n = world.pathX.Count()
+  heroX = world.pathX[0]
+  heroY = world.pathY[0]
+  heroLeft = false
+  ?f < T_WALK
+    return
+  for i = 0 .. n - 2
+    ?f >= segT[i]
+      var u = math.Clamp((f - segT[i]) * 1.0 / segD[i], 0.0, 1.0)
+      heroX = world.pathX[i] + (world.pathX[i + 1] - world.pathX[i]) * u
+      heroY = world.pathY[i] + (world.pathY[i + 1] - world.pathY[i]) * u
+      heroLeft = world.pathX[i + 1] < world.pathX[i]
+      heroMoving = u < 1
+  ?f >= T_TOP
+    heroLeft = false
+
+func HeroAt(hx, r, frame, left)
+  var b = heroR
+  var layers = heroRL
+  ?left
+    b = heroL
+    layers = heroLL
+  Show(b, true)
+  // up out of the dark of the tunnel as he steps out of it
+  var k = math.Clamp((f - T_WALK + 10) / 30.0, 0.0, 1.0)
+  ?k < 1 | f < T_WALK + 22
+    for l : layers
+      var c = l[0]
+      c.color = color.Lerp("#000000", l[1], k)
+  b.x = SX(hx) - 1
+  ?left
+    b.x = SX(hx) - 4
+  b.y = SY(r) - 3
+  b.frame = frame
+  glowX = hx + 1
+  glowY = r - 2
+
+
+// ---------------------------------------------------------------- him
+
+func Him()
+  ?f < T_WALK - 10
+    return
+  Walk()
+  var r = math.FloorToInt(heroY)
+  var frame = 4
+  ?heroMoving
+    frame = (f / 6) % 4
+  // the Omega chest: bending to it, the lid, the runestone, into his pocket
+  ?f >= T_OMEGA & f < T_OMEGA + OMEGA_T
+    var o = f - T_OMEGA
+    ?o < 50
+      frame = 11
+    :?o < 58
+      frame = 9
+    :
+      frame = 4
+  // the lash: he hops it without looking
+  ?f >= T_LASH - 3 & f < T_LASH + 7
+    frame = 5
+    r = r - 1
+  // the stairs going: he starts, looks back at the gap and who's on the far side, then on
+  var c = f - T_COLLAPSE
+  ?c >= 0 & c < COLLAPSE_T - 2
+    ?c < 5
+      frame = 5
+      r = r - 1
+    :?c < COLLAPSE_T - 14
+      heroLeft = false
+  // his breath in the cold whenever he stands: chest, stairs, crest
+  var b0 = -1
+  ?f >= T_OMEGA + 20 & f < T_OMEGA + OMEGA_T - 10
+    b0 = T_OMEGA + 20
+  :?c >= 8 & c < COLLAPSE_T - 14
+    b0 = T_COLLAPSE + 8
+  :?f >= T_TOP + 10
+    b0 = T_TOP + 10
+  Breath(b0, r, heroLeft & f < T_TOP)
+  // on the crest: he looks up
+  ?f >= T_TOP + 40
+    Show(lookUp, true)
+    lookUp.frame = 0
+    lookUp.x = SX(heroX) - 1
+    lookUp.y = SY(r) - 3
+    glowX = heroX + 1
+    glowY = r - 2
+    return
+  HeroAt(heroX, r, frame, heroLeft)
+
+// a breath every couple of seconds from b0 (-1: none) in front of his face, r is his feet's row
+func Breath(b0, r, left)
+  var u = (f - b0) % 64
+  var on = b0 >= 0 & u < 22
+  Show(breath, on)
+  ?!on
+    return
+  var dir = 1
+  var fx = heroX + 2
+  ?left
+    dir = -1
+    fx = heroX - 2
+  breath.x = SX(fx) + dir * math.RoundToInt(u * 0.15)
+  breath.y = SY(r) - 3 - math.RoundToInt(u * 0.08)
+  breath.frame = 2
+  ?u >= 8
+    breath.frame = 1
+  breath.color = color.Lerp("#8a949a", "#000000", math.Clamp((u - 8) / 14.0, 0.0, 1.0))
+
+func Omega()
+  Show(omega, true)
+  omega.x = SX(world.omegaX)
+  omega.y = SY(94)
+  omega.frame = 0
+  var o = f - T_OMEGA
+  ?o >= 14 & o < 22
+    omega.frame = 1
+  :?o >= 22
+    omega.frame = 2
+  Show(heart, o >= 24 & o < 44)
+  heart.frame = 0
+  ?o < 32
+    heart.frame = 1
+  heart.x = SX(world.omegaX + 2) - 2
+  heart.y = SY(92) - IMin(2, IMax(0, o - 24) / 8)
+  // the runestone: up out of it, into his hand, held up a moment, then his pocket
+  Show(rune, o >= 44 & o < 102)
+  var rx = world.omegaX + 2
+  var ry = 93.0
+  ?o < 58
+    ry = 93 - (o - 44) * 0.15
+  :?o < 92
+    rx = heroX - 2
+    ry = math.FloorToInt(heroY) - 1
+  :
+    rx = heroX - 1
+    ry = math.FloorToInt(heroY) - 1 + (o - 92) / 5
+  rune.x = SX(rx) - 1
+  rune.y = SY(ry)
+  ?o = 14
+    play treasure_open
+  :?o = 44
+    play treasure_item_yellow
+
+
+// ---------------------------------------------------------------- the Dominotaur
+
+// up after him: hooves, a shape in the fog, then him with a roar. he stops, lashes at the
+// Pusher's heels with the game's own swing, reels it in and comes on, slower
+func Domino()
+  Show(dLash, false)
+  Show(spark, false)
+  ?f = T_D1 - 70
+    play bronze_guardian_steps 80
+  :?f = T_D1 - 22
+    play bronze_guardian_steps 70
+  :?f = T_D1 + 46
+    play dominotaur_awake 90
+  ?f < T_D1
+    return
+  var t = f - T_D1
+  // where the simulated whip takes over from the game's frames
+  var swing = T_LASH - spr.dLashCrack
+  var x = 0.0
+  var r = 0.0
+  var left = true
+  var frame = 17 + (f / 7) % 4
+  ?t < 100
+    // along the ledge below, after him
+    x = 72 - t * 0.42
+    r = FeetOn(2, x)
+  :?t < 112
+    x = 30 - (t - 100) * 0.42
+    r = 96
+  :?t < 128
+    // up the steps
+    x = 25 + (t - 112) * 0.125
+    r = 96 - (t - 112) * 0.25
+    left = false
+  :?f < swing - 12
+    x = 27 + IMin(D_STOP - 27, (t - 128) * 0.33)
+    r = FeetOn(LASH_SEG, x)
+    left = false
+    ?x >= D_STOP
+      frame = 0
+  :?f < swing
+    // the game's swing: the whip back, over his horns, out in front
+    x = D_STOP
+    r = FeetOn(LASH_SEG, x)
+    left = false
+    frame = 21 + (f - swing + 12) / 4
+  :?f < swing + spr.dLashN
+    // the whip drawn as it moves (simulated), from his fist
+    x = D_STOP
+    r = FeetOn(LASH_SEG, x)
+    left = false
+    frame = 32
+  :?f < T_LASH + 50
+    x = D_STOP
+    r = FeetOn(LASH_SEG, x)
+    left = false
+    frame = 0
+  :
+    // after him, quicker, up to where the stairs were and no further
+    x = IMin(BLOCK_X, D_STOP + (f - T_LASH - 50) * 0.4)
+    r = FeetOn(LASH_SEG, x)
+    left = false
+    ?f >= T_ARRIVE
+      frame = 0
+  // out of the fog: a dark shape first, then himself
+  var lit = math.Clamp((t - 12) / 34.0, 0.0, 1.0)
+  var b = dominoL
+  ?!left
+    b = dominoR
+  ?lit < 1
+    b = dominoSL
+    ?!left
+      b = dominoSR
+    b.color = color.Lerp(SHADOW, "#ffff62", lit)
+  Show(b, true)
+  b.frame = frame
+  b.x = SX(x) - spr.dominoMid
+  ?!left
+    b.x = SX(x) - (spr.dominoW - 1 - spr.dominoMid)
+  b.y = SY(math.FloorToInt(r)) - 7
+  // the lash: over his horns, out along the ledge, cracks at the Pusher's heels, reeled back in
+  var k = f - swing
+  Show(dLash, k >= 0 & k < spr.dLashN)
+  dLash.frame = IMin(spr.dLashN - 1, IMax(0, k))
+  dLash.x = SX(spr.dLashHandX) - spr.dLashOX
+  dLash.y = SY(spr.dLashHandRow) - spr.dLashOY
+  Show(spark, f >= T_LASH & f < T_LASH + 6)
+  spark.frame = IMin(1, IMax(0, f - T_LASH) / 3)
+  spark.x = SX(LASH_AT_X - 1) - 1
+  spark.y = SY(math.FloorToInt(FeetOn(LASH_SEG, LASH_AT_X - 1))) - 1
+  ?f = swing - 12
+    play dominotaur_whip_attack
+  :?f = T_LASH
+    play dominotaur_whip_hit
+
+
+// ---------------------------------------------------------------- the stairs
+
+// the stairs give way behind him: grit while he's on them, then the shake, the steps falling
+// into the cloud, a burst of snow. what's left (gone) is a scar and rubble, no way up
+func Collapse()
+  var c = f - T_COLLAPSE
+  Show(gone, c >= 3)
+  gone.x = SX(world.goneX)
+  gone.y = SY(world.goneY)
+  ?c >= 0 & c < 10 & opt.shake
+    root.x = ((f % 2) * 2 - 1) * (1 + (10 - c) / 6)
+    root.y = ((f + 1) % 2) * 2 - 1
+  for i = 0 .. 1
+    var d = cdust[i]
+    var k = (c - i * 5) / 3
+    Show(d, c >= i * 5 & k < 7)
+    d.frame = IMin(6, IMax(0, k))
+    d.x = SX(90 + i * 3) - 7
+    d.y = SY(80 - i) - 5
+  for i = 0 .. chunks.Count() - 1
+    var ch = chunks[i]
+    var t = c - (i % 3) * 3
+    var x0 = 88.0 + (i * 3) % 6
+    var y0 = 79.0 + i % 4
+    var grit = c < 0
+    ?grit
+      t = c + 34 - i * 6
+      x0 = 90.0 + i % 3
+      y0 = 81.0
+    var x = x0 + ((i % 5) - 2) * 0.12 * t
+    var y = y0 - 0.35 * t * (i % 2) + 0.05 * t * t
+    ?grit
+      x = x0
+      y = y0 + 0.06 * t * t
+    Show(ch, t >= 0 & t < 50 & (!grit | i < 3) & y < camY + H + 1)
+    ch.frame = i % 5
+    ?grit
+      ch.frame = 2 + i % 2
+    ch.x = SX(x)
+    ch.y = SY(y)
+
+
+// ---------------------------------------------------------------- air
+
+// fog across the cliff up to the top of the cloud, snow higher up, the sky over the crest
+func Air(lit)
+  for i = 0 .. 5
+    var b = fogBack[IMin(2, i)]
+    var k = 0.8
+    ?i >= 3
+      b = fogFront[i - 3]
+      k = 1.25
+    var y = math.RoundToInt(Wrap(FOG_Y[i] - camY * k, H + 6)) - 3
+    b.x = math.RoundToInt(Wrap(FOG_X[i] + f * FOG_V[i], W + 70)) - 70
+    b.y = y
+    Show(b, camY + y > world.crestRow + 8)
+  for i = 0 .. 13
+    var s = flakes[i]
+    var y = math.RoundToInt(Wrap((i * 37) % 33 + f * 0.22 - camY, H + 4)) - 2
+    // the opening gust throws them across, easing off by 40 frames
+    var wind = 2.2 * IMin(f, 40) * (1.0 - IMin(f, 40) / 80.0)
+    s.x = math.RoundToInt(Wrap((i * 53) % 97 - f * 0.12 + math.Sin(f * 0.05 + i) * 1.5 - wind, W + 4)) - 2
+    s.y = y
+    s.frame = i % 3
+    Show(s, camY + y < 92 & camY + y > world.crestRow + 3)
+  // now and then a gust takes the snow off the ledges and streaks it across
+  for i = 0 .. 2
+    var g = gusts[i]
+    var p = (f + i * 110) % 330
+    // only gusts that get all the way across before the sky's in view
+    var s0 = f - p
+    Show(g, p < 50 & s0 > T_WALK & s0 + 50 <= T_TOP - 150)
+    g.frame = i
+    g.x = math.RoundToInt(-26 + p * (W + 30) / 50.0)
+    g.y = 3 + (i * 9 + (f + i * 110) / 330 * 7) % (H - 8)
+  // the opening flurry across the whole picture, the way scene 4's draught was going, thinning out
+  for i = 0 .. 15
+    var s = flurry[i]
+    var a = f - (i * 7) % 23
+    var sx = W + 2 - a * (2.4 + (i % 4) * 0.3)
+    var on = a >= 0 & sx > -2
+    Show(s, on)
+    ?on
+      s.x = math.RoundToInt(sx)
+      s.y = 3 + (i * 11) % (H - 6) + a / 9
+      s.frame = (i / 2) % 3
+      ?i % 2 = 0
+        s.frame = 0
+  pSky.x = -math.RoundToInt(camX * 0.3)
+  pSky.y = -math.RoundToInt((camY - SUMMIT_CAM) * 0.3)
+  // a few of the brighter stars twinkling
+  for i = 0 .. 9
+    var tw = twinkles[i]
+    tw.x = pSky.x + (i * 37 + 11) % 150
+    tw.y = pSky.y + (i * 5 + 1) % 11
+    var ph = (f + i * 23) % 90
+    tw.frame = 0
+    ?ph < 24
+      tw.frame = ph / 6
+  Light(moonGlow, lit, pSky.x + 30, pSky.y + 5)
+
+
+// ---------------------------------------------------------------- sounds
+
+// sounds for the climb (the chest, roar and lash have their own): the runestone, hooves,
+// the hop, the stairs going, gusts, and his sword into the snow on the crest
+func Sfx()
+  var o = f - T_OMEGA
+  ?o = 2
+    play pickup_stone 85
+  :?o = 96
+    // into his pocket
+    play unequip 110
+  :?f = T_LASH + 7
+    play waterfall_land 105
+  :?f = T_COLLAPSE - 30
+    play stone_throw_hit 150
+  :?f = T_COLLAPSE
+    play fissure_break_apart 95
+  :?f = T_COLLAPSE + 5
+    play mushroom_boss_fat_slam 60
+  :?f = T_COLLAPSE + 22
+    play stone_throw_hit 60
+  :?f = T_COLLAPSE + 38
+    play stone_throw_hit 48
+  :?f = T_ARRIVE + 4
+    play dominotaur_awake 80
+  :?f = T_TOP
+    play air_hiss 80
+  :?f = 1
+    // the gust it opens on
+    play air_hiss 100
+  :?f = T_TOP + 40
+    // sword point-down into the snow as he looks up, same sound as on scene 9's ledge
+    play stone_throw_hit 75
+    play sword_hit 62
+  // the Dominotaur's hooves, while he's walking
+  var t = f - T_D1
+  var walking = (t >= 0 & t < 128) | (f >= T_LASH + 50 & f < T_ARRIVE)
+  ?walking & t % 56 = 20
+    play bronze_guardian_steps @68 + (t / 56) % 2 * 10@
+  // the first gust of each round brings the wind with it
+  ?f > T_WALK & f + 50 <= T_TOP - 150 & (f % 330) = 0
+    play air_hiss @110 + (f / 330) % 3 * 12@
+
+
+// ---------------------------------------------------------------- the frame
+
+func Frame()
+  for c : allLights
+    c.x = OFF
+    c.w = 0
+  root.x = 0
+  root.y = 0
+  Show(heroR, false)
+  Show(heroL, false)
+  Show(lookUp, false)
+  Show(dominoR, false)
+  Show(dominoL, false)
+  Show(dominoSR, false)
+  Show(dominoSL, false)
+  Show(heart, false)
+  Show(rune, false)
+
+  // camera: up with him, then off him to the sky at the top. whole cells, row for row with
+  // him, so he doesn't wobble against the cliff (an eased camera rounds a frame apart)
+  Walk()
+  var hr = math.FloorToInt(heroY)
+  // lower down a little while who's behind him matters
+  var off = 4 - math.RoundToInt(2 * Prog(T_LASH - 100, T_LASH - 70)) + math.RoundToInt(2 * Prog(T_COLLAPSE + COLLAPSE_T, T_COLLAPSE + COLLAPSE_T + 30))
+  var target = IMin(world.pathY[0] + 6 - H, hr - (cy + off))
+  ?f < T_TOP - 10
+    camY = target
+  :?f % 2 = 0 & camY > SUMMIT_CAM
+    camY = camY - 1
+  // a little to the right for the lash and the stairs (on a narrow screen they'd be at the edge),
+  // a column at a time on the frames he moves one, so he holds still on screen
+  var tx = 55 - cx
+  ?f >= T_LASH - 60 & f < T_COLLAPSE + COLLAPSE_T
+    tx = IMax(55 - cx, IMin(65 - cx, 110 - W))
+  var hc = math.RoundToInt(heroX)
+  ?hc ! lastCol & camX ! tx
+    ?(tx > camX & hc > lastCol) | (tx < camX & hc < lastCol)
+      camX = camX + hc - lastCol
+  lastCol = hc
+
+  pTop.x = SX(0)
+  pTop.y = SY(0)
+  pBot.x = SX(0)
+  pBot.y = SY(90)
+  pFront.x = SX(0)
+  pFront.y = SY(0)
+  // spurs of rock near the camera, passing faster than the cliff
+  pNear.x = SX(0)
+  pNear.y = -math.RoundToInt(camY * 1.3)
+
+  var lit = jobs.Count() = 0
+  Him()
+  Omega()
+  Domino()
+  Collapse()
+  Air(lit)
+  Light(himGlow, lit & f >= T_WALK + 5, SX(glowX), SY(glowY))
+  Sfx()
+
+  card.color = Fade(T_CARD, T_CARD + 25, T_CARD_OUT, T_CARD_OUT + 25)
+  Show(card, f < T_CARD_OUT + 26)
+  banner.Update(f)
+  // dim in the cloud, clearer in the moonlight. no fade: in on a gust, out on a cut to the mine
+  SetShade(color.Lerp("#a6b0c0", "#d8e2f0", Prog(T_TOP - 90, T_TOP + 60)))
+  ?f = 0
+    ambient.Stop()
+    ambient.Add("ambient_icy")
+
+
+// ---------------------------------------------------------------- the film calls these
+
+// a scene built ahead waits off to the side, but the game still draws its canvases,
+// so they get no width till it's on
+func Park()
+  parkW = []
+  for c : parkable
+    parkW.Add(c.w)
+    c.w = 0
+
+func Unpark()
+  for i = 0 .. parkable.Count() - 1
+    var c = parkable[i]
+    c.w = parkW[i]
+
+// built near the end of the scene before so its lights are ready, then waits off to
+// the side (ui.Remove would throw it away)
+func Warm()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+    root.x = OFF
+    parked = true
+    Park()
+    // nothing else on the frame it's built in, that's heavy enough
+    return
+  RunJobs()
+
+func Update()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+  ?parked
+    root.x = 0
+    parked = false
+    Unpark()
+  ?!attached
+    ui.root.Add(root)
+    attached = true
+  RunJobs()
+  Frame()
+  ?f <= T_END
+    f++
+  :
+    over = true
+
+// take its picture off the screen (another scene is playing)
+func Detach()
+  ?attached
+    ui.root.Remove(root)
+    attached = false
+
+// back to the start, for watching again
+func Reset()
+  f = 0
+  over = false
+  lastCol = 0
+  camX = 55 - cx

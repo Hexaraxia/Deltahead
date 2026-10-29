@@ -1,0 +1,1789 @@
+// One must imagine the deltahead happy
+// Scene 8: Grudges
+//
+// green stars, and one elite after another made to beat the way he fights (Plated, Regen,
+// Hydra, Berserker, Mundane, Monarch), plus a haul line ride and an Emerald Egg with a Moonbloom.
+// one frame counter, 30 a second, and each fight has its own story time (hit-stops, slow bits)
+
+var world = import Deltahead/Art8Ridge
+var spr = import Deltahead/Art8Sprites
+var hts = import Deltahead/Art7Heights
+var s7 = import Deltahead/Art7Sprites
+var skyArt = import Deltahead/ArtSky
+var banner = new Deltahead/Banner
+var look = import Deltahead/Look
+// flashes and shake options (no comment on an import line or the game can't read the file)
+var opt = import Deltahead/Options
+var snowLight = import Deltahead/Sparkle
+
+// timing, in frames
+var T_CARD = 20
+var T_CARD_OUT = 130
+var T_BANNER = 40
+var T_WALK = 50         // walks in along the ridge
+var V = 0.45            // walking pace
+var X0 = -6.0
+// per stop (fights, haul line, egg): P where he stops, SL story length, EXIT how far he's moved by the end.
+// MARKS [S, n] holds n real frames at S (negative: -n at half speed), SHAKES [S, frames, strength],
+// IMPACTS [S, frames] where everything but the fighters drops out
+var P = [66, 100, 124, 151, 206, 246, 282, 342]
+var SL = [262, 290, 265, 100, 330, 135, 400, 230]
+var EXIT = [12, 0, 0, 40, 0, 0, 2, 0]
+var MARKS = [[69, 4, 94, 4, 183, -12, 195, 6], [64, 3, 236, 6], [84, 4, 170, 8, 172, -10, 188, 5], [], [70, -14, 232, 6], [], [93, 3, 105, 3, 112, 3, 140, 6, 210, 4, 290, -16, 306, 10], []]
+var SHAKES = [[8, 6, 1, 69, 4, 1, 94, 4, 1, 195, 12, 2, 208, 4, 1], [206, 3, 1, 216, 3, 1, 226, 3, 1, 236, 12, 2, 260, 4, 1], [96, 8, 2, 188, 10, 2], [80, 4, 1], [15, 10, 2, 45, 8, 1, 60, 40, 1, 120, 47, 1], [5, 8, 1], [30, 12, 3, 93, 3, 1, 140, 10, 2, 158, 6, 1, 210, 6, 2, 235, 10, 1, 306, 16, 3, 322, 8, 2], []]
+var IMPACTS = [[195, 4], [236, 3], [96, 2, 188, 3], [], [], [], [210, 3, 306, 5], []]
+var D = [0, 0, 0, 0, 0, 0, 0, 0]   // real frames each takes (set in Schedule)
+var A = [0, 0, 0, 0, 0, 0, 0, 0]   // when he gets to each
+var ZIP = 3                       // the haul line stop
+var ZIP_RUN = 50                  // ride length
+var ZIP_LET = 182                 // where he lets go, short of the far post
+var ZIP_FLY = 16                  // flight after letting go, lands 9 cells on
+var SHK = []                    // shakes and impacts in real time
+var IMP = []
+var T_MUSIC = 0
+var T_FADE = 0
+var T_END = 0
+var SKY_X = -10
+var SKY_Y = -20
+var MOON_X = 4
+var MOON_Y = 2
+
+// the game's bite timing in 2-frame steps: Eater's mouth out at step 10, Gobbler's lunge closes at 11
+var E_BITE = [2, 2, 3, 3, 1, 2, 1, 1, 1, 1, 1, 2, 2, 18]
+var G_BITE = [2, 2, 3, 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 18]
+// the Regen flurry, speeding up
+var FLURRY = [162, 170, 177, 184, 190, 196, 201, 206, 211, 216, 221, 226]
+
+var GREEN = "#32da5a"   // the game's foe tint at 16-20 stars
+var GOLD = "#d7af42"    // the game's Monarch tint
+var SHINE = "#fff1b0"
+var GONE = "#262b30"    // remains in the snow, fading
+var CLANK = "#bfe6f4"   // a blade on ice
+var FROST = "#bfe6f4"
+var NAMES = ["P L A T E D", "R E G E N", "H Y D R A", "B E R S E R K E R", "M U N D A N E", "M O N A R C H"]
+var DESCS = ["Half the health, but heavily armored.", "It heals 95 health every second.", "Each one that falls splits in two.", "Faster, and hits harder.", "It has no element.", "One of them leads, with four times the health and armor."]
+
+var f = 0
+var built = false
+var over = false
+var attached = false
+var parked = false
+var parkable = []       // canvases set to 0 width while it waits (Park)
+var parkW = []
+var W = 0
+var H = 0
+var cx = 0
+var cy = 0
+var lb = 0
+var camX = 0
+var camY = 0
+var camLead = 0         // camera offset from him, in cells
+var lastHang = 0        // how far below the path he hung when he let go of the line
+var lastHx = 0
+var stillFor = 0        // frames on the same cell
+var heroX = 0.0
+var walking = false
+var hFrame = -1         // frame the fights want him on this frame
+var hDX = 0.0
+var hDY = 0.0
+var hLeft = false
+var ghostOn = false     // afterimages behind him
+var impact = false
+var ghX = [0, 0, 0, 0, 0, 0, 0, 0]
+var ghY = [0, 0, 0, 0, 0, 0, 0, 0]
+var ghF = [0, 0, 0, 0, 0, 0, 0, 0]
+var NORMAL = "#e0e0e0"
+var shadeCol = ""
+var invis = ui.AddStyle("#########")
+var OFF = -1000
+
+var root = null
+var backdrop = []
+var shade = []
+var bars = []
+var card = null
+var names = []
+var descs = []
+var gotText = null
+var pSky = null
+var moon = null
+var auroraHi = null
+var auroraMid = null
+var auroraLo = null
+var summit = null
+var pFar = null
+var pBack = null
+var mist = null
+var mist2 = null
+var near = null
+var flakes = []
+var ridgeA = null
+var ridgeB = null
+var bgLayers = []
+var eggA = null
+var shell = null
+var bud = null
+var slurs = []
+var gobs = []
+var plates = null
+var eaters = []
+var eatersR = []
+var cuts = null
+var ghosts = []
+var heroR = null
+var heroL = null
+var slashR = null
+var slashL = null
+var hits = []
+var bursts = []
+var shards = []
+var motes = []
+var puffs = []
+var lines = []
+var cloud = null
+var auroraGlow = null
+var moonGlow = null
+var burstGlow = null
+var glints = null
+var vig = []
+var GRADE_H = "#ccd6e4"    // the heights by moonlight
+var allLights = []
+var lightW = []          // each light's width (0 while it's off)
+var jobs = []
+
+
+// ---------------------------------------------------------------- building
+
+func Place(c, x, y)
+  c.anchor = "top_left"
+  c.dock = "top_left"
+  c.x = x
+  c.y = y
+
+func MakeAnim(layers, x, y)
+  var a = ui.AddAnim(layers[0][1])
+  root.Add(a)
+  Place(a, x, y)
+  a.color = layers[0][0]
+  ?layers.Count() > 1
+    for i = 1 .. layers.Count() - 1
+      var l = a.AddLayer(layers[i][1])
+      l.color = layers[i][0]
+  return a
+
+func MakeCanvas(x, y, w, h, blend)
+  var c = ui.AddCanvas()
+  parkable.Add(c)
+  root.Add(c)
+  Place(c, x, y)
+  c.w = w
+  c.h = h
+  c.blend = blend
+  c.SetFG("#000000")
+  c.SetBG("#000000")
+  return c
+
+// canvases top out at 100x27, so screen-sized ones are tiled
+func Tiles(blend, y0, rows)
+  var list = []
+  for j = 0 .. (rows - 1) / 27
+    for i = 0 .. (W - 1) / 100
+      var c = MakeCanvas(i * 100, y0 + j * 27, IMin(100, W - i * 100), IMin(27, rows - j * 27), blend)
+      list.Add(c)
+  return list
+
+func Solid(list)
+  for c : list
+    c.Set(" ")
+
+func MakeText(s)
+  var t = ui.AddText(s)
+  root.Add(t)
+  t.anchor = "center_center"
+  t.dock = "center_center"
+  t.x = 0
+  t.y = 0
+  t.w = string.Size(s) + 2
+  t.h = 1
+  t.align = "center"
+  t.color = "#000000"
+  return t
+
+func MakeTop(s, y)
+  var t = ui.AddText(s)
+  root.Add(t)
+  t.anchor = "top_center"
+  t.dock = "top_center"
+  t.x = 0
+  t.y = y
+  t.w = string.Size(s) + 2
+  t.h = 1
+  t.align = "center"
+  t.color = "#000000"
+  t.visible = false
+  return t
+
+// a light: additive canvas fading out from the center, filled a bit each frame
+func QueueHalo(w, h, r, g, b, bgk)
+  var c = MakeCanvas(OFF, 0, w, h, "add")
+  jobs.Add([c, w, h, r, g, b, bgk, 0])
+  allLights.Add(c)
+  lightW.Add(w)
+  c.w = 0
+  return c
+
+func RunJobs()
+  look.Run()
+  ?jobs.Count() = 0
+    return
+  var j = jobs[0]
+  var total = j[1] * j[2]
+  var last = IMin(total - 1, j[7] + 150)
+  var hx = (j[1] - 1) / 2.0
+  var hy = (j[2] - 1) / 2.0
+  for i = j[7] .. last
+    var x = i % j[1]
+    var y = i / j[1]
+    var dx = (x - hx) / (hx + 0.5)
+    var dy = (y - hy) / (hy + 0.5)
+    var k = 1.0 - math.Sqrt(dx * dx + dy * dy)
+    ?k > 0
+      k = k * k
+      j[0].SetFG(x, y, color.FromRGB(math.RoundToInt(j[3] * k), math.RoundToInt(j[4] * k), math.RoundToInt(j[5] * k)))
+      j[0].SetBG(x, y, color.FromRGB(math.RoundToInt(j[3] * k * j[6]), math.RoundToInt(j[4] * k * j[6]), math.RoundToInt(j[5] * k * j[6])))
+  j[7] = last + 1
+  ?j[7] >= total
+    jobs.RemoveAt(0)
+
+// extra real frames a fight's marks add
+func Extra(m)
+  var n = 0
+  ?m.Count() > 0
+    for k = 0 .. m.Count() / 2 - 1
+      n = n + IMax(m[k * 2 + 1], -m[k * 2 + 1])
+  return n
+
+// real frame for story time S in fight i
+func RealAt(i, S)
+  var m = MARKS[i]
+  var r = S
+  ?m.Count() > 0
+    for k = 0 .. m.Count() / 2 - 1
+      var s = m[k * 2]
+      var n = m[k * 2 + 1]
+      ?s < S
+        ?n > 0
+          r = r + n
+        :
+          r = r + IMin(-n, S - s)
+  return A[i] + r
+
+// a fight's story time, t real frames into it
+func Story(t, m)
+  var cum = 0
+  ?m.Count() > 0
+    for k = 0 .. m.Count() / 2 - 1
+      var s = m[k * 2]
+      var n = m[k * 2 + 1]
+      ?t < s + cum
+        return (t - cum) * 1.0
+      ?n > 0
+        ?t < s + cum + n
+          return s * 1.0
+        cum = cum + n
+      :
+        ?t < s + cum - 2 * n
+          return s + (t - s - cum) * 0.5
+        cum = cum - n
+  return (t - cum) * 1.0
+
+// when he gets to each stop, plus shakes and impacts in real time
+func Schedule()
+  var t = T_WALK + math.CeilToInt((P[0] - X0) / V)
+  for i = 0 .. P.Count() - 1
+    D[i] = SL[i] + Extra(MARKS[i])
+    ?i > 0
+      t = A[i - 1] + D[i - 1] + math.CeilToInt((P[i] - P[i - 1] - EXIT[i - 1]) / V)
+    A[i] = t
+    var sh = SHAKES[i]
+    ?sh.Count() > 0
+      for k = 0 .. sh.Count() / 3 - 1
+        SHK.Add(RealAt(i, sh[k * 3]))
+        SHK.Add(sh[k * 3 + 1])
+        SHK.Add(sh[k * 3 + 2])
+    var im = IMPACTS[i]
+    ?im.Count() > 0
+      for k = 0 .. im.Count() / 2 - 1
+        IMP.Add(RealAt(i, im[k * 2]))
+        IMP.Add(im[k * 2 + 1])
+  T_MUSIC = A[0] - 30
+  // no fade, scene 9 cuts in with him walking on
+  T_FADE = A[7] + 260
+  T_END = T_FADE
+
+func Build()
+  built = true
+  W = screen.w
+  H = screen.h
+  cx = W / 2
+  cy = H / 2
+  Schedule()
+  disable hud
+  disable player
+  disable banner
+  storage.Set("hidHud", true)
+
+  root = ui.AddPanel()
+  root.style = invis
+  root.anchor = "top_left"
+  root.dock = "top_left"
+  root.x = 0
+  root.y = 0
+  root.w = W
+  root.h = H
+  attached = true
+
+  // back to front: sky, aurora, ranges, summit, path, egg, creatures, him, effects, cloud, near rocks, lights, shade, bars
+  backdrop = Tiles("opaque", 0, H)
+  Solid(backdrop)
+  pSky = MakeAnim(skyArt.sky, SKY_X, SKY_Y)
+  moon = MakeAnim(skyArt.moon, MOON_X, MOON_Y)
+  auroraLo = MakeAnim(s7.auroraLo, 0, 0)
+  auroraMid = MakeAnim(s7.auroraMid, 0, 0)
+  auroraHi = MakeAnim(s7.auroraHi, 0, 0)
+  pFar = MakeAnim(hts.far, 0, 0)
+  summit = MakeAnim(s7.summit, 0, 0)
+  pBack = MakeAnim(hts.back, 0, 0)
+  mist = MakeAnim(s7.mist, 0, 0)
+  mist2 = MakeAnim(s7.mist, 0, 0)
+  ridgeA = MakeAnim(world.ridgeA, 0, 0)
+  ridgeB = MakeAnim(world.ridgeB, 0, 0)
+  // moonlight catching the snow
+  glints = snowLight.Make(root, 6)
+  eggA = MakeAnim(spr.egg, 0, 0)
+  shell = MakeAnim(spr.shell, 0, 0)
+  bud = MakeAnim(spr.bud, 0, 0)
+  for i = 0 .. 1
+    lines.Add(MakeAnim(spr.lines, 0, 0))
+  for i = 0 .. 1
+    slurs.Add(MakeAnim(spr.slurper, 0, 0))
+  for i = 0 .. 1
+    gobs.Add(MakeAnim(spr.gobbler, 0, 0))
+  plates = MakeAnim(spr.plates, 0, 0)
+  for i = 0 .. 6
+    eaters.Add(MakeAnim(spr.eater, 0, 0))
+  eatersR.Add(MakeAnim(spr.eaterR, 0, 0))
+  cuts = MakeAnim(spr.cuts, 0, 0)
+  for i = 0 .. 1
+    ghosts.Add(MakeAnim(spr.hero, 0, 0))
+  heroR = MakeAnim(spr.hero, 0, 0)
+  heroL = MakeAnim(spr.heroL, 0, 0)
+  slashR = MakeAnim(spr.slashR, 0, 0)
+  slashL = MakeAnim(spr.slashL, 0, 0)
+  for i = 0 .. 2
+    hits.Add(MakeAnim(spr.hit, 0, 0))
+  for i = 0 .. 1
+    bursts.Add(MakeAnim(spr.burst, 0, 0))
+  for i = 0 .. 2
+    shards.Add(MakeAnim(spr.shard, 0, 0))
+  for i = 0 .. 5
+    motes.Add(MakeAnim(spr.mote, 0, 0))
+  for i = 0 .. 3
+    puffs.Add(MakeAnim(s7.puff, 0, 0))
+  cloud = MakeAnim(s7.cloud, 0, 0)
+  for i = 0 .. 9
+    flakes.Add(MakeAnim(s7.flake, 0, 0))
+  near = MakeAnim(s7.near, 0, 0)
+  auroraGlow = QueueHalo(80, 14, 14, 52, 22, 0.25)
+  moonGlow = QueueHalo(31, 13, 40, 46, 58, 0.12)
+  // flash from a big hit
+  burstGlow = QueueHalo(21, 9, 84, 100, 88, 0.14)
+  bgLayers = [pSky, moon, auroraLo, auroraMid, auroraHi, pFar, summit, pBack, mist, mist2, ridgeA, ridgeB, cloud, near]
+  for s : flakes
+    bgLayers.Add(s)
+
+  shade = Tiles("multiply", 0, H)
+  vig = look.Vignette(root, W, H, 0.35)
+  for c : vig
+    parkable.Add(c)
+  lb = IMax(2, H / 12)
+  for c : Tiles("opaque", 0, lb)
+    bars.Add(c)
+  for c : Tiles("opaque", H - lb, lb)
+    bars.Add(c)
+  Solid(bars)
+  card = MakeText("Up there, the mountain learned how he fought.")
+  card.y = -(H / 4)
+  for i = 0 .. NAMES.Count() - 1
+    names.Add(MakeTop(NAMES[i], lb + 3))
+    descs.Add(MakeTop(DESCS[i], lb + 4))
+  gotText = ui.AddText("+1 Moonbloom Bud")
+  root.Add(gotText)
+  Place(gotText, OFF, 0)
+  gotText.w = 18
+  gotText.h = 1
+  gotText.visible = false
+  banner.Build(root, "The Mountain Heights", 16, 19, T_BANNER, lb + 1)
+
+
+// ---------------------------------------------------------------- helpers
+
+func IMin(a, b)
+  ?a < b
+    return a
+  return b
+
+func IMax(a, b)
+  ?a > b
+    return a
+  return b
+
+func Prog(a, b)
+  return math.Clamp((f - a) * 1.0 / (b - a), 0.0, 1.0)
+
+// u through n frames, 0 to 1
+func Ramp(u, n)
+  return math.Clamp(u * 1.0 / n, 0.0, 1.0)
+
+func Ease(u)
+  return u * u * (3.0 - 2.0 * u)
+
+// from a to b as u goes from u0 to u1, eased
+func Glide(u, u0, u1, a, b)
+  return a + (b - a) * Ease(Ramp(u - u0, u1 - u0))
+
+func Fade(a, b, c, d)
+  return color.Lerp("#000000", "#e7e3da", Prog(a, b) - Prog(c, d))
+
+func SetShade(col)
+  ?!string.Equals(col, shadeCol)
+    shadeCol = col
+    for c : shade
+      c.SetFG(col)
+      c.SetBG(col)
+
+func Wrap(v, m)
+  return v - math.Floor(v / m) * m
+
+func Show(c, on)
+  c.visible = on
+
+func ShowAll(list, on)
+  for c : list
+    c.visible = on
+
+// off lights get no width too: the game draws every canvas cell, shown or not
+func Light(c, on, x, y)
+  ?on
+    var w = lightW[allLights.IndexOf(c)]
+    c.w = w
+    c.x = x - w / 2
+    c.y = y - c.h / 2
+  :
+    c.x = OFF
+    c.w = 0
+
+func SX(x)
+  return math.RoundToInt(x - camX)
+
+func SY(y)
+  return math.RoundToInt(y - camY)
+
+// row his feet are on at x, the ridge climbs as it goes
+func Feet(x)
+  return world.feet0 + (world.feet1 - world.feet0) * x * 1.0 / world.ww
+
+// his row at x (the creatures' too)
+func Row(x)
+  return math.FloorToInt(Feet(math.RoundToInt(x)))
+
+// walks from stop to stop
+func HeroX()
+  walking = false
+  ?f < T_WALK
+    return X0
+  var from = X0
+  var left = T_WALK * 1.0
+  for i = 0 .. P.Count() - 1
+    ?f < A[i]
+      walking = true
+      return from + V * (f - left)
+    ?f < A[i] + D[i]
+      ?i = ZIP
+        return P[i] + ZipDX(f - A[i])
+      return P[i] * 1.0
+    from = P[i] + EXIT[i] * 1.0
+    left = A[i] + D[i] * 1.0
+  walking = true
+  return from + V * (f - left)
+
+// story time passes x this frame (sp last frame's, st this one's)
+func Cross(sp, st, x)
+  return sp < x & st >= x
+
+// how hard it shakes this frame
+func ShakeNow()
+  var amp = 0
+  ?!opt.shake
+    return 0
+  ?SHK.Count() > 0
+    for k = 0 .. SHK.Count() / 3 - 1
+      ?f >= SHK[k * 3] & f < SHK[k * 3] + SHK[k * 3 + 1]
+        amp = IMax(amp, SHK[k * 3 + 2])
+  return amp
+
+func ImpactNow()
+  // impact frames count as a flash, so skip them with flashes off
+  ?!opt.flashes
+    return false
+  ?IMP.Count() > 0
+    for k = 0 .. IMP.Count() / 2 - 1
+      ?f >= IMP[k * 2] & f < IMP[k * 2] + IMP[k * 2 + 1]
+        return true
+  return false
+
+
+// ---------------------------------------------------------------- him
+
+// walking, standing, or whatever the fight wants. swings get the blade arc, dashes get afterimages
+func Him()
+  var frame = 4
+  ?walking
+    frame = (f / 5) % 4
+  ?hFrame >= 0
+    frame = hFrame
+  var hx = heroX + hDX
+  var r = math.FloorToInt(Feet(math.RoundToInt(hx)))
+  var b = heroR
+  ?hLeft
+    b = heroL
+  Show(b, true)
+  // same rounded x the camera follows so they never disagree
+  var sx = math.RoundToInt(hx) - camX
+  var sy = SY(r) - 3 + math.RoundToInt(hDY)
+  b.x = sx - 1
+  ?hLeft
+    b.x = sx - 4
+  // dash and run frames have the blade out behind him, so shift them a column
+  ?frame = 13 | frame >= 24
+    b.x = b.x - 1
+    ?hLeft
+      b.x = b.x + 2
+  b.y = sy
+  b.frame = frame
+  ?frame = 10
+    var sl = slashR
+    sl.x = sx + 4
+    ?hLeft
+      sl = slashL
+      sl.x = sx - 7
+    Show(sl, true)
+    sl.y = sy
+  // position history for the afterimages
+  for k = 7 .. 1
+    ghX[k] = ghX[k - 1]
+    ghY[k] = ghY[k - 1]
+    ghF[k] = ghF[k - 1]
+  ghX[0] = b.x
+  ghY[0] = sy
+  ghF[0] = frame
+  ?ghostOn & !hLeft
+    for k = 0 .. 1
+      var g = ghosts[k]
+      Show(g, true)
+      g.x = ghX[2 + k * 3]
+      g.y = ghY[2 + k * 3]
+      g.frame = ghF[2 + k * 3]
+      g.color = color.Lerp("#7a7a7a", "#2a2a2a", k * 1.0)
+
+// his frame u frames into a swing (blade lands at 9), -1 once it's done
+func Swing(u)
+  ?u < 0 | u >= 23
+    return -1
+  ?u < 6
+    return 6
+  ?u < 9
+    return 10
+  ?u < 17
+    return 7
+  return 8
+
+// quick swing (blade lands at 4)
+func Quick(u)
+  ?u < 0 | u >= 12
+    return -1
+  ?u < 2
+    return 6
+  ?u < 4
+    return 10
+  ?u < 9
+    return 7
+  return 8
+
+func DoSwing(u)
+  var s = Swing(u)
+  ?s >= 0
+    hFrame = s
+
+func DoQuick(u)
+  var s = Quick(u)
+  ?s >= 0
+    hFrame = s
+
+
+// ---------------------------------------------------------------- the creatures
+
+// frame u frames into an animation with these holds
+func Seq(u, holds, base, rate)
+  var s = u / rate
+  for i = 0 .. holds.Count() - 1
+    ?s < holds[i]
+      return base + i
+    s = s - holds[i]
+  return base + holds.Count() - 1
+
+// puts a creature's feet on the path at world x (its left edge)
+func OnPath(a, x, w, h)
+  Show(a, true)
+  var ix = math.RoundToInt(x)
+  a.x = ix - camX
+  a.y = SY(math.FloorToInt(Feet(ix + w / 2))) - (h - 1)
+
+// buried till it wakes, then frame fr, and once dead it sinks back into the snow and fades
+func Life(a, x, t, wake, dead, fr, col, w, h, wakeBase, wakeN, wakeRate)
+  ?dead >= 0 & t >= dead
+    var u = t - dead
+    ?u >= 70
+      return
+    OnPath(a, x, w, h)
+    a.frame = wakeBase + IMax(0, wakeN - 1 - u / 4)
+    a.color = color.Lerp(col, GONE, Ramp(u - 25, 45))
+    return
+  OnPath(a, x, w, h)
+  a.color = col
+  ?t < wake
+    a.frame = wakeBase
+  :?t < wake + wakeN * wakeRate
+    a.frame = wakeBase + (t - wake) / wakeRate
+  :
+    a.frame = fr
+
+func Eater(a, x, t, wake, dead, fr, col)
+  Life(a, x, t, wake, dead, fr, col, spr.eW, spr.eH, spr.eWake, 5, 3)
+
+func Gobbler(a, x, t, wake, dead, fr, col)
+  Life(a, x, t, wake, dead, fr, col, spr.gW, spr.gH, spr.gWake, 5, 3)
+
+// thrown from x0 to x1 over n frames in an arc hgt rows high, tumbling
+func Thrown(a, x0, x1, u, n, hgt, w, h, wakeBase, col)
+  var p = Ramp(u, n)
+  OnPath(a, x0 + (x1 - x0) * p, w, h)
+  a.y = a.y - math.RoundToInt(hgt * math.Sin(p * 3.1416))
+  a.frame = wakeBase + 4 - (math.FloorToInt(u) / 3) % 3
+  a.color = col
+
+// a thrown Eater that dies where it lands
+func EaterThrown(a, x0, x1, s, t0, n, hgt, col)
+  ?s < t0 + n
+    Thrown(a, x0, x1, s - t0, n, hgt, spr.eW, spr.eH, spr.eWake, col)
+  :
+    Eater(a, x1, s, -100, t0 + n, 0, col)
+
+// x0 to x1 between t0 and t1
+func Walk(t, t0, t1, x0, x1)
+  return x0 + (x1 - x0) * Ramp(t - t0, t1 - t0)
+
+// a hit, u frames after the blade lands, at world x and row y
+func Hit(k, x, y, u, col)
+  ?u >= 0 & u < 9
+    var a = hits[k]
+    Show(a, true)
+    a.x = math.RoundToInt(x) - camX - 1
+    a.y = SY(y) - 1
+    a.frame = math.FloorToInt(u) / 3
+    a.color = col
+
+// a big hit
+func Burst(k, x, y, u, col)
+  ?u >= 0 & u < 12
+    var a = bursts[k]
+    Show(a, true)
+    a.x = math.RoundToInt(x) - camX - 4
+    a.y = SY(y) - 2
+    a.frame = IMin(2, math.FloorToInt(u) / 4)
+    a.color = col
+    ?u < 5
+      Light(burstGlow, jobs.Count() = 0 & opt.flashes, math.RoundToInt(x) - camX, SY(y))
+
+// snow puff where something lands or comes up
+func Puff(k, x, y, u)
+  ?u >= 0 & u < 16
+    var a = puffs[k]
+    Show(a, true)
+    a.x = math.RoundToInt(x) - camX - 6
+    a.y = SY(y) - 3
+    a.frame = IMin(3, math.FloorToInt(u) / 4)
+
+// speed streaks (x is its back edge, dir which way it's going)
+func Lines(k, x, y, dir, on)
+  ?on
+    var a = lines[k]
+    Show(a, true)
+    a.x = math.RoundToInt(x) - camX
+    ?dir > 0
+      a.x = a.x - 8
+    a.y = SY(y) - 1
+    a.frame = (f / 2) % 2
+
+// a chunk of ice armor knocked off, tumbling toward dir
+func Shard(k, x, y, u, dir)
+  ?u >= 0 & u < 30
+    var a = shards[k]
+    Show(a, true)
+    a.x = math.RoundToInt(x + dir * u * 0.35) - camX
+    a.y = SY(y + 0.015 * u * u - 0.35 * u)
+    a.frame = (math.FloorToInt(u) / 4) % 4
+    a.color = color.Lerp("#a8d4e6", GONE, Ramp(u - 18, 12))
+
+// a spark off his blade on the line
+func Spark(k, x, y, u)
+  ?u >= 0 & u < 10
+    var a = motes[k]
+    Show(a, true)
+    a.x = math.RoundToInt(x - u * 0.8) - camX
+    a.y = SY(y - 0.4 * u + 0.06 * u * u)
+    a.frame = IMin(2, u / 4)
+    a.color = color.Lerp("#ffd27a", "#3a2a10", Ramp(u, 10))
+
+// a rising mote (healing, or something dying)
+func Mote(k, x, y, u, col)
+  ?u >= 0 & u < 30
+    var a = motes[k]
+    Show(a, true)
+    a.x = math.RoundToInt(x) - camX
+    a.y = SY(y - u * 0.15)
+    a.frame = IMin(2, math.FloorToInt(u) / 10)
+    a.color = color.Lerp(col, "#000000", Ramp(u - 12, 18))
+
+// a glint that brightens and fades in place
+func Twinkle(k, x, y, u)
+  ?u >= 0 & u < 18
+    var a = motes[k]
+    Show(a, true)
+    a.x = math.RoundToInt(x) - camX
+    a.y = SY(y)
+    a.frame = 2 - IMin(2, u / 6)
+    a.color = color.Lerp(GREEN, "#000000", Ramp(u - 6, 12))
+
+// the elite's name and what it does
+func Label(i, t0, t1)
+  var on = f >= t0 & f < t1 + 20
+  Show(names[i], on)
+  Show(descs[i], on)
+  ?on
+    var a = Prog(t0, t0 + 20) - Prog(t1, t1 + 20)
+    names[i].color = color.Lerp("#000000", GREEN, a)
+    descs[i].color = color.Lerp("#000000", "#9a9a9a", a)
+
+
+// ---------------------------------------------------------------- the fights
+
+// 1. Plated: a Gobbler iced over where he always swings. two hits bounce off, so he jumps
+// it and comes down on its head
+func Plated()
+  var t = f - A[0]
+  var st = Story(t, MARKS[0])
+  var sp = Story(t - 1, MARKS[0])
+  var s = math.FloorToInt(st)
+  Label(0, A[0] - 25, A[0] + 140)
+  var p = P[0] * 1.0
+  var r = Row(p)
+  var x = Walk(st, 25, 55, p + 9, p)
+  var fr = spr.gBite + 16
+  ?s >= 25 & s < 55
+    fr = spr.gWalk + (s / 6) % 4
+  :?s >= 110 & s < 190
+    fr = Seq(s - 110, G_BITE, spr.gBite, 2)
+  Gobbler(gobs[0], x, s, 8, 195, fr, GREEN)
+  ?s >= 23 & s < 195
+    OnPath(plates, x, spr.gW, spr.gH)
+    plates.frame = 0
+  // two hits that bounce off the ice
+  DoSwing(s - 60)
+  DoSwing(s - 85)
+  // each fight only moves him while it's on
+  var dx = 0.0 - Glide(st, 69, 76, 0, 1) + Glide(st, 80, 85, 0, 1) - Glide(st, 94, 101, 0, 2)
+  // back out of its lunge
+  ?s >= 118 & s < 134
+    hFrame = 5
+  dx = dx - Glide(st, 118, 134, 0, 4)
+  ?s >= 118 & s < 134
+    hDY = -2.0 * math.Sin(Ramp(st - 118, 16) * 3.1416)
+  // a look, crouch, run, up over it, down on its head
+  ?s >= 150 & s < 165
+    hFrame = 16
+  ?s >= 165 & s < 173
+    hFrame = 13
+    ghostOn = true
+  dx = dx + Glide(st, 165, 173, 0, 6) + Walk(st, 173, 189, 0, 9) + Walk(st, 195, 208, 0, 3)
+  ?t >= 0 & t < D[0]
+    hDX = dx
+  Lines(0, p + hDX - 1, r - 1, 1, s >= 165 & s < 175)
+  ?s >= 173 & s < 186
+    hFrame = 14
+    hDY = -9.0 * math.Sin(Ramp(st - 173, 13) * 1.5708)
+  :?s >= 186 & s < 208
+    hFrame = 15
+    hDY = -9.0 + 3.0 * Ramp(st - 186, 9) + 6.0 * Ramp(st - 195, 13)
+  :?s >= 208 & s < 225
+    hFrame = 16
+  :?s >= 225 & s < 232
+    hFrame = 8
+  Hit(0, p + 5, r - 1, st - 69, CLANK)
+  Hit(1, p + 5, r - 1, st - 94, CLANK)
+  Burst(0, p + 10, r - 6, st - 195, "#ffffff")
+  Shard(0, p + 4, r - 3, st - 195, -1)
+  Shard(1, p + 4, r - 2, st - 195, -0.6)
+  Shard(2, p + 5, r - 1, st - 195, 0.5)
+  Puff(0, p + 9, r, st - 8)
+  Puff(1, p + 12, r, st - 208)
+  Puff(2, p + 7, r, st - 214)
+  ?Cross(sp, st, 8)
+    play ki_gobbler_awake
+  ?Cross(sp, st, 60)
+    play sword_cast 95
+  ?Cross(sp, st, 69)
+    play hammer_hit 140
+  ?Cross(sp, st, 85)
+    play sword_cast 102
+  ?Cross(sp, st, 94)
+    play hammer_hit 128
+    play ice_elemental_attack_hit 120
+  ?Cross(sp, st, 120)
+    play ki_gobbler_attack
+  ?Cross(sp, st, 165)
+    play shield_dash 90
+  ?Cross(sp, st, 173)
+    play quest_stone_jump 110
+  ?Cross(sp, st, 195)
+    play sword_kill
+    play hammer_hit 80
+    play ice_elemental_attack_hit 90
+  ?Cross(sp, st, 197)
+    play ki_gobbler_death 100
+  ?Cross(sp, st, 208)
+    play waterfall_land 90
+
+// 2. Regen: an Eater that heals faster than he cuts, so he cuts faster and faster till
+// it can't keep up, and the last one sends it flying
+func Regen()
+  var t = f - A[1]
+  var st = Story(t, MARKS[1])
+  var sp = Story(t - 1, MARKS[1])
+  var s = math.FloorToInt(st)
+  Label(1, A[1] - 25, A[1] + 150)
+  var p = P[1] * 1.0
+  var r = Row(p)
+  var x = Walk(st, 25, 50, p + 8, p + 1)
+  var fr = spr.eBite + 13
+  ?s >= 25 & s < 50
+    fr = spr.eWalk + (s / 5) % 4
+  ?s < 236
+    Eater(eaters[0], x, s, 5, -1, fr, GREEN)
+  :
+    EaterThrown(eaters[0], p + 1, p + 14, s, 236, 24, 5.0, GREEN)
+  // one cut that heals, two that heal, then more than it can heal
+  var n = 0
+  var healing = 0.0
+  ?s >= 64 & s < 95
+    n = 1
+    healing = Ramp(st - 70, 25)
+  :?s >= 104 & s < 145
+    n = 1
+    ?s >= 116
+      n = 2
+    healing = Ramp(st - 120, 25)
+  :?s >= 162 & s < 236
+    n = 0
+    for k = 0 .. FLURRY.Count() - 1
+      ?s >= FLURRY[k]
+        n = n + 1
+    n = IMin(5, n)
+  ?n > 0
+    OnPath(cuts, x + 3, 9, 3)
+    cuts.y = cuts.y - 1
+    cuts.frame = n
+    cuts.color = color.Lerp("#ffffff", GREEN, healing)
+  for k = 0 .. 2
+    Mote(k, x + 5 + k * 2, r - 3, st - 72 - k * 5, GREEN)
+    Mote(k + 3, x + 6 + k, r - 3, st - 122 - k * 5, GREEN)
+  ?s >= 165 & s < 236
+    Mote((s / 8) % 6, x + 4 + (s / 7) % 5, r - 3, (st - 165) % 16 * 2, GREEN)
+  // him
+  DoSwing(s - 55)
+  DoQuick(s - 100)
+  DoQuick(s - 112)
+  ?s >= 148 & s < 160
+    hFrame = 16
+  ?t >= 0 & t < D[1]
+    hDX = 0.0 - Glide(st, 140, 148, 0, 1) + Glide(st, 158, 162, 0, 1)
+  ?s >= 160 & s < 228
+    hFrame = 6
+    ghostOn = true
+    for k = 0 .. FLURRY.Count() - 1
+      var u = s - FLURRY[k]
+      ?u >= -2 & u < 0
+        hFrame = 10
+      :?u >= 0 & u < 3
+        hFrame = 7
+        ?k % 2 = 1
+          hFrame = 17
+      Hit(k % 3, p + 6, r - 1 - (k % 2), st - FLURRY[k], "#ffffff")
+  ?s >= 228 & s < 233
+    hFrame = 6
+  :?s >= 233 & s < 236
+    hFrame = 10
+  :?s >= 236 & s < 252
+    hFrame = 7
+  :?s >= 255 & s < 282
+    hFrame = 9
+  Hit(0, p + 6, r - 1, st - 64, "#ffffff")
+  Hit(1, p + 6, r - 1, st - 104, "#ffffff")
+  Hit(2, p + 6, r - 1, st - 116, "#ffffff")
+  Burst(0, p + 7, r - 2, st - 236, "#ffffff")
+  Puff(0, p + 7, r, st - 5)
+  Puff(1, p + 20, r, st - 260)
+  ?Cross(sp, st, 5)
+    play ki_eater_awake
+  ?Cross(sp, st, 55)
+    play sword_cast 100
+  ?Cross(sp, st, 64)
+    play sword_hit 100
+  ?Cross(sp, st, 72)
+    play potion_healing 105
+  ?Cross(sp, st, 104)
+    play sword_hit 106
+  ?Cross(sp, st, 116)
+    play sword_hit 112
+  ?Cross(sp, st, 122)
+    play potion_healing 118
+  for k = 0 .. FLURRY.Count() - 1
+    ?Cross(sp, st, FLURRY[k])
+      play sword_hit @88 + k * 4@
+  ?Cross(sp, st, 233)
+    play sword_cast 80
+  ?Cross(sp, st, 236)
+    play sword_kill
+    play ki_eater_death 100
+  ?Cross(sp, st, 260)
+    play waterfall_land 110
+
+// 3. Hydra: it splits into two halves either side of him. they bite at once, he jumps and
+// they get each other, then he spins down between them (halves don't split)
+func Hydra()
+  var t = f - A[2]
+  var st = Story(t, MARKS[2])
+  var sp = Story(t - 1, MARKS[2])
+  var s = math.FloorToInt(st)
+  Label(2, A[2] - 25, A[2] + 150)
+  var p = P[2] * 1.0
+  var r = Row(p)
+  var x = Walk(st, 25, 50, p + 8, p + 1)
+  var fr = spr.eBite + 13
+  ?s >= 25 & s < 50
+    fr = spr.eWalk + (s / 5) % 4
+  ?s < 96
+    var col = GREEN
+    ?s >= 84 & (s / 2) % 2 = 0
+      col = "#ffffff"
+    Eater(eaters[1], x, s, 5, -1, fr, col)
+  :
+    // the halves: one hops in front of him, one goes over him to land behind
+    var fh = spr.eBite + 13
+    ?s >= 116 & s < 150
+      fh = spr.eBite + 1 + (s / 10) % 2
+    :?s >= 150 & s < 188
+      fh = Seq(s - 150, E_BITE, spr.eBite, 2)
+    ?s < 188
+      Eater(eaters[2], p + 1, s, -100, -1, fh, GREEN)
+      eaters[2].y = eaters[2].y - math.RoundToInt(4 * math.Sin(Ramp(st - 96, 16) * 3.1416))
+      var xb = p + 1 - 13 * Ramp(st - 96, 20)
+      Life(eatersR[0], xb, s, -100, -1, fh, GREEN, spr.eW, spr.eH, spr.eWake, 5, 3)
+      eatersR[0].y = eatersR[0].y - math.RoundToInt(9 * math.Sin(Ramp(st - 96, 20) * 3.1416))
+    :
+      EaterThrown(eaters[2], p + 1, p + 13, s, 188, 22, 5.0, GREEN)
+      ?s < 210
+        Thrown(eatersR[0], p - 12, p - 23, st - 188, 22, 5.0, spr.eW, spr.eH, spr.eWake, GREEN)
+      :
+        Life(eatersR[0], p - 23, s, -100, 210, 0, GREEN, spr.eW, spr.eH, spr.eWake, 5, 3)
+  // him
+  DoSwing(s - 55)
+  DoSwing(s - 75)
+  ?(s >= 128 & s < 140) | (s >= 205 & s < 218) | (s >= 230 & s < 240)
+    hLeft = true
+  ?s >= 150 & s < 158
+    hFrame = 16
+  :?s >= 158 & s < 178
+    hFrame = 14
+  :?s >= 178 & s < 182
+    hFrame = 17
+  :?s >= 182 & s < 188
+    var spin = [17, 6, 7, 10]
+    hFrame = spin[(s - 182) % 4]
+  :?s >= 188 & s < 194
+    hFrame = 7
+  :?s >= 194 & s < 204
+    hFrame = 16
+  ?s >= 158 & s < 182
+    hDY = -6.0 * math.Sin(Ramp(st - 158, 12) * 1.5708) - Ramp(st - 172, 10)
+  :?s >= 182 & s < 188
+    hDY = -7.0 + 7.0 * Ramp(st - 182, 6)
+  ?s >= 178 & s < 192
+    ghostOn = true
+  Hit(0, p + 6, r - 1, st - 64, "#ffffff")
+  Hit(1, p + 6, r - 1, st - 84, "#ffffff")
+  Hit(2, p, r - 2, st - 170, "#ffffff")
+  Burst(0, p + 6, r - 2, st - 96, "#ffffff")
+  Burst(1, p + 1, r - 1, st - 188, "#ffffff")
+  Puff(0, p + 7, r, st - 5)
+  Puff(1, p + 19, r, st - 210)
+  Puff(2, p - 17, r, st - 210)
+  ?Cross(sp, st, 5)
+    play ki_eater_awake 95
+  ?Cross(sp, st, 55)
+    play sword_cast 100
+  ?Cross(sp, st, 64)
+    play sword_hit 100
+  ?Cross(sp, st, 75)
+    play sword_cast 96
+  ?Cross(sp, st, 84)
+    play sword_hit 90
+  ?Cross(sp, st, 88)
+    play ki_eater_death 120
+  ?Cross(sp, st, 96)
+    play treasure_item_pop 120
+    play ki_eater_awake 150
+  ?Cross(sp, st, 100)
+    play ki_eater_awake 135
+  ?Cross(sp, st, 150)
+    play ki_eater_attack 150
+  ?Cross(sp, st, 158)
+    play quest_stone_jump 115
+  ?Cross(sp, st, 170)
+    play ki_eater_attack_hit 135
+  ?Cross(sp, st, 182)
+    play sword_cast 80
+  ?Cross(sp, st, 188)
+    play sword_kill
+    play sword_hit 85
+  ?Cross(sp, st, 190)
+    play ki_eater_death 130
+  ?Cross(sp, st, 192)
+    play ki_eater_death 115
+  ?Cross(sp, st, 210)
+    play waterfall_land 120
+
+// the broken stretch: he hooks his sword over one of Hans's haul lines, rides it across
+// throwing sparks, lets go short of the far post and lands past the edge
+
+// distance from the near post, t frames into the crossing
+func ZipDX(t)
+  var ride = ZIP_LET - world.zipA
+  ?t < 14
+    return 0.0
+  // speeding up the whole way, still moving at the end for the leap off
+  ?t < 14 + ZIP_RUN
+    var u = Ramp(t - 14, ZIP_RUN)
+    return ride * (3 * u * u - u * u * u) / 2
+  // off the line, slowing in the air
+  var p = Ramp(t - 14 - ZIP_RUN, ZIP_FLY)
+  return ride + 9.0 * (1.0 - (1.0 - p) * (1.0 - p))
+
+// the line's row at x, with a fraction, matching the art
+func CableRow(x)
+  var u = math.Clamp((x - world.zipA) * 1.0 / (world.zipB - world.zipA), 0.0, 1.0)
+  var ya = math.FloorToInt(Feet(world.zipA)) - world.zipH
+  var yb = math.FloorToInt(Feet(world.zipB)) - world.zipH
+  return ya + (yb - ya) * u + world.zipSag * math.Sin(u * 3.1416)
+
+func Zip()
+  var t = f - A[ZIP]
+  ?t < 0 | t >= D[ZIP]
+    return
+  var hx = heroX
+  var r = Row(hx)
+  // hangs with his sword on the line
+  var cr = CableRow(hx + 1)
+  var hang = math.FloorToInt(cr) - (r - 3)
+  var tLet = 14 + ZIP_RUN
+  var tLand = tLet + ZIP_FLY
+  ?t < 8
+    hFrame = 4
+  :?t < 14
+    hFrame = 14
+    hDY = hang * Ramp(t - 8, 6)
+  :?t < tLet
+    hFrame = 20 + (t / 4) % 2
+    hDY = hang
+  :?t < tLand
+    // let go: up a little, then down onto the path, legs tucked for the landing
+    var p = Ramp(t - tLet, ZIP_FLY)
+    hFrame = 14
+    ?p > 0.6
+      hFrame = 5
+    hDY = lastHang * (1.0 - p * p) - 1.5 * math.Sin(p * 3.1416)
+  :?t < tLand + 10
+    hFrame = 16
+  :?t < tLand + 16
+    hFrame = 8
+  ?t < tLet
+    lastHang = hang
+  // sparks off the blade (thrown back so they never cross him) and speed streaks
+  ?t >= 14 & t < tLet
+    for k = 0 .. 3
+      Spark(k, hx + 1, cr - 1, (t - 14 + k * 3) % 12)
+    Lines(0, hx - 2, cr + 2, 1, t > 24 & t < tLet)
+  Puff(0, hx + 2, r, t - tLand)
+  ?t = 14
+    play waterfall_hook_hit
+    play hammer_hit 150
+  :?t = 18
+    play waterfall_rope_swing
+  :?t = 22
+    play blade_drag 85
+  :?t = 42
+    play blade_drag 105
+  :?t = 62
+    play blade_drag 92
+  :?t = 14 + ZIP_RUN
+    play waterfall_rope_grab 90
+  :?t = 14 + ZIP_RUN + ZIP_FLY
+    play waterfall_land 95
+
+// 4. Berserker: two charging Slurpers. he steps aside and the first runs off the broken
+// edge, the second stops right at the lip and he taps it over
+var CHARGE = 1.3
+func Berserk()
+  var t = f - A[4]
+  var st = Story(t, MARKS[4])
+  var sp = Story(t - 1, MARKS[4])
+  var s = math.FloorToInt(st)
+  Label(3, A[4] - 35, A[4] + 140)
+  var p = P[4] * 1.0
+  var r = Row(p)
+  var edge = world.gapB - 1.0
+  // the first charges out over the gap, hangs a moment, and drops
+  var x0 = p + 14
+  var a = slurs[0]
+  var tOver = 60 + (x0 - (edge - 18)) / CHARGE
+  ?s < 60
+    SlurperUp(a, x0, s, 15)
+    ?s >= 45
+      a.frame = spr.sLick + 6
+  :?st < tOver
+    var xa = x0 - CHARGE * (st - 60)
+    OnPath(a, xa, spr.sW, spr.sH)
+    a.frame = spr.sWalk + (s / 2) % 2
+    a.color = GREEN
+    Lines(0, xa + spr.sW, r - 3, -1, true)
+  :?st < tOver + 45
+    Fall(a, edge - 18, st - tOver, 6)
+  // the second stops with its front feet over the lip and rocks there
+  var x2 = p + 24
+  var b = slurs[1]
+  var stop = edge - 2
+  var brake = 10.0
+  var tBrake = 120 + (x2 - stop - brake) / CHARGE
+  var tStop = tBrake + 2 * brake / CHARGE
+  ?s < 120
+    SlurperUp(b, x2, s, 17)
+    ?s >= 47
+      b.frame = spr.sLick + 6
+  :?st < tBrake
+    var xb = x2 - CHARGE * (st - 120)
+    OnPath(b, xb, spr.sW, spr.sH)
+    b.frame = spr.sWalk + (s / 2) % 2
+    b.color = GREEN
+    Lines(1, xb + spr.sW, r - 3, -1, true)
+  :?st < tStop
+    var u = (st - tBrake) / (tStop - tBrake)
+    OnPath(b, stop + brake * (1.0 - u) * (1.0 - u), spr.sW, spr.sH)
+    b.frame = spr.sWalk + (s / 3) % 2
+    b.color = GREEN
+    Puff(1, stop + brake * (1.0 - u) * (1.0 - u) + 3, r, (st - tBrake) % 8)
+  :?s < 233
+    OnPath(b, stop, spr.sW, spr.sH)
+    b.frame = spr.sLick + 1 + ((s / 9) % 2) * 2
+    b.color = GREEN
+  :?s < 278
+    Fall(b, stop, st - 233, 0)
+  Puff(2, p + 23, r, st - 15)
+  Puff(3, p + 33, r, st - 17)
+  // each one hitting the cloud
+  Puff(0, edge - 27, r + 9 + world.floorFront, st - tOver - 22)
+  Puff(0, edge - 11, r + 9 + world.floorFront, st - 233 - 16)
+  Shard(0, edge, r, st - 175, -0.2)
+  Shard(1, edge + 1, r, st - 195, -0.2)
+  // he steps toward us as each goes by, then goes back to tap the second
+  ?(s >= 66 & s < 100) | (s >= 132 & s < 178)
+    hDY = 2.0
+  ?s >= 190 & s < 262
+    hLeft = true
+  ?s >= 190 & s < 210
+    hFrame = (s / 5) % 4
+  :?s >= 262 & s < 284
+    hFrame = (s / 5) % 4
+  ?t >= 0 & t < D[4]
+    hDX = 0.0 - 4.0 * Ramp(st - 190, 20) + 4.0 * Ramp(st - 262, 22)
+  DoQuick(s - 226)
+  Hit(0, p - 5, r - 1, st - 230, "#ffffff")
+  ?Cross(sp, st, 15)
+    play ki_slerper_awake 115
+    play stone_throw_hit 70
+  ?Cross(sp, st, 17)
+    play ki_slerper_awake 100
+  ?Cross(sp, st, 45)
+    play ki_slerper_awake 85
+  ?Cross(sp, st, 60)
+    play ki_slerper_walk 150
+  ?Cross(sp, st, 76)
+    play ki_slerper_walk 130
+  ?Cross(sp, st, tOver + 4)
+    play ki_slerper_death 130
+  ?Cross(sp, st, tOver + 8)
+    play skeleton_boss_arm_woosh 80
+  ?Cross(sp, st, tOver + 22)
+    play air_hiss 70
+  ?Cross(sp, st, 120)
+    play ki_slerper_walk 145
+  ?Cross(sp, st, 138)
+    play ki_slerper_walk 155
+  ?Cross(sp, st, tBrake)
+    play blade_drag 70
+  ?Cross(sp, st, 175)
+    play pickup_stone 70
+  ?Cross(sp, st, 195)
+    play pickup_stone 64
+  ?Cross(sp, st, 230)
+    play sword_hit 135
+  ?Cross(sp, st, 233)
+    play ki_slerper_death 112
+  ?Cross(sp, st, 236)
+    play skeleton_boss_arm_woosh 72
+  ?Cross(sp, st, 249)
+    play air_hiss 64
+
+// a Slurper buried, then waking fast (it's Berserk)
+func SlurperUp(a, x, s, wake)
+  OnPath(a, x, spr.sW, spr.sH)
+  a.color = GREEN
+  ?s < wake
+    a.frame = spr.sWake
+  :
+    a.frame = spr.sWake + IMin(15, s - wake)
+
+// over the edge and down into the cloud, hanging first for hang frames
+func Fall(a, x, u, hang)
+  OnPath(a, x - 0.8 * u, spr.sW, spr.sH)
+  var d = math.Max(0.0, u - hang)
+  a.y = a.y + math.RoundToInt(0.035 * d * d)
+  a.frame = spr.sDead
+  ?u < hang
+    a.frame = spr.sWalk + (math.FloorToInt(u) / 2) % 2
+  a.color = color.Lerp(GREEN, "#1c3a24", Ramp(u - 18, 25))
+
+// 5. Mundane: big show waking up, then its element goes out of it in a puff of frost and
+// it goes down to one tap
+func Mundane()
+  var t = f - A[5]
+  var st = Story(t, MARKS[5])
+  var sp = Story(t - 1, MARKS[5])
+  var s = math.FloorToInt(st)
+  Label(4, A[5] - 25, A[5] + 115)
+  var p = P[5] * 1.0
+  var r = Row(p)
+  var x = Walk(st, 60, 85, p + 8, p + 1)
+  var fr = spr.eBite + 13
+  ?s >= 20 & s < 50
+    fr = spr.eBite + 1 + (s / 8) % 2
+  :?s >= 60 & s < 85
+    fr = spr.eWalk + (s / 7) % 4
+  Eater(eaters[3], x, s, 5, 99, fr, GREEN)
+  for k = 0 .. 5
+    Mote(k, x + 4 + (k * 3) % 6, r - 2 - k % 2, st - 32 - k * 4, FROST)
+  DoSwing(s - 90)
+  Hit(0, p + 6, r - 1, st - 99, "#ffffff")
+  Puff(0, p + 7, r, st - 5)
+  ?Cross(sp, st, 5)
+    play ki_eater_awake 80
+  ?Cross(sp, st, 32)
+    play ice_elemental_death 70
+  ?Cross(sp, st, 90)
+    play sword_cast 100
+  ?Cross(sp, st, 99)
+    play sword_kill
+  ?Cross(sp, st, 100)
+    play ki_eater_death 125
+
+// 6. Monarch: a pack of Eaters led by a gold Gobbler. one bite throws him across the snow,
+// he gets up and goes back through them, then steps into the Monarch's lunge
+func Monarch()
+  var t = f - A[6]
+  var st = Story(t, MARKS[6])
+  var sp = Story(t - 1, MARKS[6])
+  var s = math.FloorToInt(st)
+  Label(5, A[6] - 25, A[6] + 160)
+  var p = P[6] * 1.0
+  var r = Row(p)
+  // A: comes on, bites, gets knocked flying
+  var fa = spr.eBite + 13
+  ?s >= 45 & s < 60
+    fa = spr.eWalk + (s / 4) % 4
+  :?s >= 60 & s < 93
+    fa = Seq(s - 60, E_BITE, spr.eBite, 2)
+  ?s < 93
+    Eater(eaters[4], Walk(st, 45, 60, p + 9, p + 1), s, 5, -1, fa, GREEN)
+  :
+    EaterThrown(eaters[4], p + 1, p + 26, s, 93, 25, 7.0, GREEN)
+  // B: cut, comes back and bites him, cut again and flies
+  var xb = Walk(st, 45, 60, p + 16, p + 8)
+  xb = Walk(st, 93, 103, xb, p + 4)
+  xb = Walk(st, 105, 113, xb, p + 7)
+  xb = Walk(st, 113, 120, xb, p + 1)
+  xb = Walk(st, 170, 190, xb, p - 4)
+  var fb = spr.eBite + 13
+  ?(s >= 45 & s < 60) | (s >= 93 & s < 103) | (s >= 113 & s < 120) | (s >= 170 & s < 190)
+    fb = spr.eWalk + (s / 4) % 4
+  :?s >= 120 & s < 170
+    fb = Seq(s - 120, E_BITE, spr.eBite, 2)
+  ?s < 206
+    Eater(eaters[5], xb, s, 11, -1, fb, GREEN)
+  :
+    EaterThrown(eaters[5], p - 4, p + 12, s, 206, 24, 6.0, GREEN)
+  // C: a row back, cut, comes on again, flies over the Monarch
+  var xc = Walk(st, 45, 60, p + 23, p + 14)
+  xc = Walk(st, 93, 103, xc, p + 6)
+  xc = Walk(st, 112, 120, xc, p + 9)
+  xc = Walk(st, 170, 190, xc, p + 2)
+  var fc = spr.eBite + 13
+  ?(s >= 45 & s < 60) | (s >= 93 & s < 103) | (s >= 170 & s < 190)
+    fc = spr.eWalk + (s / 4) % 4
+  ?s < 210
+    Eater(eaters[6], xc, s, 17, -1, fc, GREEN)
+    eaters[6].y = eaters[6].y - 1
+  :
+    EaterThrown(eaters[6], p + 2, p + 24, s, 210, 26, 8.0, GREEN)
+  // the Monarch: gold with a shine, roars, charges, lunges, goes down
+  var xm = Walk(st, 150, 230, p + 30, p + 16)
+  xm = Walk(st, 270, 282, xm, p)
+  var fm = spr.gBite + 16
+  ?(s >= 150 & s < 230) | (s >= 270 & s < 280)
+    fm = spr.gWalk + (s / 5) % 4
+  :?s >= 238 & s < 262
+    fm = spr.gBite + (s / 8) % 3
+  :?s >= 280
+    fm = Seq(s - 280, G_BITE, spr.gBite, 2)
+  var shine = math.Sin(f * 0.13)
+  var gold = color.Lerp(GOLD, SHINE, math.Clamp((shine - 0.75) * 4.0, 0.0, 1.0))
+  ?s >= 306
+    gold = color.Lerp(GOLD, GREEN, Ramp(st - 306, 20))
+  Gobbler(gobs[1], xm, s, 30, 306, fm, gold)
+  // him
+  ?s >= 72 & s < 92
+    hDY = 2.0
+  DoSwing(s - 84)
+  ?s >= 97 & s < 101
+    hFrame = 13
+    ghostOn = true
+  DoQuick(s - 101)
+  ?s >= 105 & s < 109
+    hFrame = 17
+  :?s >= 109 & s < 112
+    hFrame = 10
+  :?s >= 112 & s < 116
+    hFrame = 7
+  // bitten: thrown, slides, gets up
+  ?s >= 140 & s < 158
+    hFrame = 18
+    hDY = -3.0 * math.Sin(Ramp(st - 140, 18) * 3.1416)
+  :?s >= 158 & s < 185
+    hFrame = 19
+  :?s >= 185 & s < 195
+    hFrame = 9
+  // back through them
+  :?s >= 200 & s < 204
+    hFrame = 13
+    ghostOn = true
+  :?s >= 204 & s < 212
+    hFrame = Quick(s - 202)
+    ghostOn = true
+    ?s >= 208
+      hFrame = Quick(s - 206)
+  :?s >= 212 & s < 222
+    hFrame = 7
+  // the Monarch
+  :?s >= 250 & s < 292
+    hFrame = 6
+  :?s >= 292 & s < 300
+    hFrame = 13
+    ghostOn = true
+  :?s >= 300 & s < 304
+    hFrame = 10
+  :?s >= 304 & s < 330
+    hFrame = 7
+  :?s >= 330 & s < 380
+    hFrame = 9
+  var dx = Glide(st, 97, 103, 0, 3) - Glide(st, 114, 120, 0, 3)
+  dx = dx - 8.0 * (1.0 - (1.0 - Ramp(st - 140, 18)) * (1.0 - Ramp(st - 140, 18))) - Glide(st, 158, 170, 0, 2)
+  dx = dx + Walk(st, 200, 210, 0, 9) + Walk(st, 292, 300, 0, 3)
+  ?t >= 0 & t < D[6]
+    hDX = dx
+  Lines(0, p + hDX - 1, r - 1, 1, (s >= 97 & s < 103) | (s >= 200 & s < 210) | (s >= 292 & s < 300))
+  Hit(0, p + 6, r - 1, st - 93, "#ffffff")
+  Hit(1, p + 8, r - 1, st - 105, "#ffffff")
+  Hit(2, p + 9, r - 2, st - 112, "#ffffff")
+  Burst(0, p + 1, r - 2, st - 140, "#ffffff")
+  Hit(0, p - 1, r - 1, st - 206, "#ffffff")
+  Burst(1, p + 6, r - 2, st - 210, "#ffffff")
+  Burst(0, p + 6, r - 5, st - 306, SHINE)
+  for k = 0 .. 5
+    Mote(k, p + 4 + k * 2, r - 4 - k % 3, st - 306 - k * 2, GOLD)
+  Puff(0, p + 26, r, st - 30)
+  Puff(1, p - 8, r, st - 158)
+  Puff(2, p + 24, r, st - 236)
+  Puff(3, p + 8, r, st - 322)
+  ?Cross(sp, st, 5)
+    play ki_eater_awake 110
+  ?Cross(sp, st, 11)
+    play ki_eater_awake 122
+  ?Cross(sp, st, 17)
+    play ki_eater_awake 98
+  ?Cross(sp, st, 30)
+    play ki_gobbler_awake 75
+  ?Cross(sp, st, 38)
+    play acronian_cultist_power_up 80
+  ?Cross(sp, st, 78)
+    play ki_eater_attack 120
+  ?Cross(sp, st, 84)
+    play sword_cast 100
+  ?Cross(sp, st, 93)
+    play sword_hit 104
+    play ki_eater_death 118
+  ?Cross(sp, st, 97)
+    play shield_dash 95
+  ?Cross(sp, st, 105)
+    play sword_hit 100
+  ?Cross(sp, st, 108)
+    play sword_cast 90
+  ?Cross(sp, st, 112)
+    play sword_hit 110
+  ?Cross(sp, st, 135)
+    play ki_eater_attack 112
+  ?Cross(sp, st, 140)
+    play player_hit
+    play ki_eater_attack_hit 120
+  ?Cross(sp, st, 158)
+    play waterfall_land 80
+  ?Cross(sp, st, 200)
+    play shield_dash 85
+  ?Cross(sp, st, 206)
+    play sword_hit 98
+  ?Cross(sp, st, 210)
+    play sword_kill
+    play ki_eater_death 108
+  ?Cross(sp, st, 212)
+    play ki_eater_death 126
+  ?Cross(sp, st, 231)
+    play waterfall_land 110
+  ?Cross(sp, st, 238)
+    play ki_gobbler_awake 65
+  ?Cross(sp, st, 270)
+    play ki_gobbler_attack 85
+  ?Cross(sp, st, 292)
+    play shield_dash 80
+  ?Cross(sp, st, 306)
+    play sword_kill
+    play hammer_hit 80
+    play ki_gobbler_death 70
+    music.Stop()
+  ?Cross(sp, st, 322)
+    play waterfall_land 70
+
+// the Emerald Egg: rocks, cracks, and a Moonbloom bud comes up (like anyone's first egg).
+// a crafting flower for someone who can't craft, he pockets it anyway
+func Egg()
+  var t = f - A[7]
+  var ex = P[7] + 2.0
+  var r = Row(P[7] + 6)
+  OnPath(eggA, ex, spr.eggW, 3)
+  eggA.color = GREEN
+  eggA.frame = 0
+  ?(t >= 15 & t < 27) | (t >= 45 & t < 57)
+    eggA.frame = (t / 3) % 2
+  :?t >= 70 & t < 80
+    eggA.frame = 2
+  :?t >= 80
+    eggA.frame = 3
+  // a glint in place before it opens, anything rising would hop against the climbing camera
+  ?t < 80
+    Twinkle(5, ex + 6, r - 3, (f + 400) % 50)
+  // top of the shell flying off
+  var u = t - 80
+  ?u >= 0 & u < 34
+    Show(shell, true)
+    shell.x = math.RoundToInt(ex + 5 + u * 0.3) - camX
+    shell.y = SY(r - 2 + 0.03 * u * u - 0.7 * u)
+    shell.frame = (u / 4) % 4
+    shell.color = color.Lerp(GREEN, GONE, Ramp(u - 20, 14))
+  // the bud coming up
+  ?t >= 82 & t < 176
+    Show(bud, true)
+    var rise = math.RoundToInt(3 * (1.0 - Ease(Ramp(t - 82, 20))))
+    bud.x = math.RoundToInt(ex + 4) - camX
+    bud.y = SY(r) - spr.budH - 1 + rise
+    // stays a bud, it opens in the moonlight in scene 9
+    bud.frame = IMin(2, (t - 82) / 7)
+    bud.color = "#c8e0b0"
+  ?t >= 86 & t < 140
+    for k = 0 .. 2
+      Mote(k, ex + 4 + k * 2, r - 4, (t - 86 + k * 9) % 27, GREEN)
+  // he looks, then picks it up
+  ?t >= 120 & t < 160
+    hFrame = 9
+  :?t >= 160 & t < 182
+    hFrame = 11
+  var q = t - 178
+  ?q >= 0 & q < 70
+    Show(gotText, true)
+    gotText.x = math.RoundToInt(P[7] - 8.0) - camX
+    gotText.y = SY(r) - 5 - q / 12
+    gotText.color = color.Lerp(color.Lerp("#000000", GREEN, Ramp(q, 8)), "#000000", Ramp(q - 45, 25))
+  ?t = 15
+    play treasure_item_pop 110
+  :?t = 45
+    play treasure_item_pop 125
+  :?t = 70
+    play treasure_open 92
+  :?t = 80
+    play treasure_open 118
+  :?t = 86
+    play treasure_item_green
+  :?t = 176
+    play pickup_stone 135
+
+
+// ---------------------------------------------------------------- sounds
+
+// wind, and the Icy Ridge's music from the first fight to the last (the egg is just wind)
+func Sfx()
+  ?f = 0
+    ambient.Stop()
+    ambient.Add("ambient_icy")
+    music.Stop()
+  :?f = T_MUSIC
+    music.Play("icy_ridge_cyan")
+
+
+// ---------------------------------------------------------------- the frame
+
+// camera offset it wants: back to show the broken edge during the Berserkers, else wherever a fight leaves him
+func Want()
+  for i = 0 .. P.Count() - 1
+    ?f >= A[i] & f < A[i] + D[i]
+      var s = Story(f - A[i], MARKS[i])
+      ?i = ZIP
+        return 0
+      ?i = 4 & s < 290
+        return -18
+      ?i = 0 & s < 222
+        return 0
+      ?i = 6 & s < 340
+        return 0
+      return EXIT[i]
+  return 0
+
+func Frame()
+  for c : allLights
+    c.x = OFF
+    c.w = 0
+  ShowAll([heroR, heroL, slashR, slashL, plates, cuts, eggA, shell, bud, gotText], false)
+  ShowAll(slurs, false)
+  ShowAll(gobs, false)
+  ShowAll(eaters, false)
+  ShowAll(eatersR, false)
+  ShowAll(ghosts, false)
+  ShowAll(hits, false)
+  ShowAll(bursts, false)
+  ShowAll(shards, false)
+  ShowAll(motes, false)
+  ShowAll(puffs, false)
+  ShowAll(lines, false)
+  var lit = jobs.Count() = 0
+
+  // camera sits a bit behind him in whole cells so he never wobbles. it only pans off him while
+  // he stands still (a cell every 3rd frame) and catches up a cell per step once he walks
+  heroX = HeroX()
+  var hx = math.RoundToInt(heroX)
+  for i = 0 .. P.Count() - 1
+    ?f = A[i] + D[i] & i ! ZIP
+      camLead = camLead - EXIT[i]
+  ?hx = lastHx
+    stillFor = stillFor + 1
+  :
+    stillFor = 0
+  var want = Want()
+  ?camLead ! want & !walking & stillFor >= 3 & f % 3 = 0
+    ?camLead > want
+      camLead = camLead - 1
+    :
+      camLead = camLead + 1
+  :?camLead < want & walking & hx > lastHx
+    camLead = camLead + 1
+  lastHx = hx
+  camX = IMax(0, IMin(world.ww - W, hx - (cx - 14) + camLead))
+  camY = math.FloorToInt(Feet(hx)) - (cy + 3)
+  // light shake every other frame, hard shake every frame and vertical too
+  var amp = ShakeNow()
+  ?amp > 0
+    var sx = [1, 0, -1, 0]
+    var sy = [0, 1, 0, -1]
+    var ph = (f / 2) % 4
+    ?amp > 1
+      ph = f % 4
+      camY = camY + sy[ph]
+    camX = camX + sx[ph] * amp
+  impact = ImpactNow()
+
+  var sea = cy - 3
+  pSky.x = SKY_X - math.RoundToInt(camX * 0.05)
+  pSky.y = SKY_Y
+  moon.x = MOON_X
+  moon.y = MOON_Y
+  pFar.x = -10 - math.RoundToInt(camX * 0.25)
+  pFar.y = sea - hts.farSea
+  pBack.x = -20 - math.RoundToInt(camX * 0.6)
+  pBack.y = sea + 2 - math.RoundToInt((camY - (world.feet0 - (cy + 3))) * 0.6)
+  // two copies end to end, it drifts a long way
+  mist.x = -math.RoundToInt(Wrap(30 + f / 20.0 + camX * 0.7, 360))
+  mist.y = sea + 3
+  mist2.x = mist.x + 360
+  mist2.y = sea + 3
+  near.x = -10 - math.RoundToInt(camX * 1.5)
+  near.y = H - 12
+  for i = 0 .. 9
+    var s = flakes[i]
+    s.x = math.RoundToInt(Wrap((i * 53) % 97 - f * 0.25 + math.Sin(f * 0.05 + i) * 1.5, W + 4)) - 2
+    s.y = math.RoundToInt(Wrap((i * 37) % 33 + f * 0.18, H + 4)) - 2
+    s.frame = i % 3
+    s.color = "#9aa6ac"
+  var ax = -20 - math.RoundToInt(camX * 0.08)
+  var af = (f / 7) % 8
+  auroraHi.x = ax
+  auroraHi.y = lb
+  auroraHi.frame = af
+  auroraHi.color = "#32da5a"
+  auroraMid.x = ax
+  auroraMid.y = lb
+  auroraMid.frame = af
+  auroraMid.color = "#1f9a40"
+  auroraLo.x = ax
+  auroraLo.y = lb
+  auroraLo.frame = af
+  auroraLo.color = "#136328"
+  Light(auroraGlow, lit & !impact, cx, lb + 5)
+  Light(moonGlow, lit & !impact, MOON_X + 5, MOON_Y + 3)
+  summit.x = W - 28
+  summit.y = sea - 7
+  ridgeA.x = SX(0)
+  ridgeA.y = SY(0)
+  ridgeB.x = SX(200)
+  ridgeB.y = SY(0)
+  snowLight.Update(glints, f, camX, camY, W, world.feet0, world.feet1, world.ww, world.floorBack, world.floorFront, [world.gapA, world.gapB], !impact)
+  // drifts the way the camera goes so it never steps back
+  cloud.x = SX(-f * 0.015)
+  cloud.y = SY(Feet(heroX) + 7 + world.floorFront)
+  // impact frames drop everything but the fighters
+  ShowAll(bgLayers, !impact)
+
+  hFrame = -1
+  hDX = 0.0
+  hDY = 0.0
+  hLeft = false
+  ghostOn = false
+  Plated()
+  Regen()
+  Hydra()
+  Zip()
+  Berserk()
+  Mundane()
+  Monarch()
+  Egg()
+  Him()
+
+  card.color = Fade(T_CARD, T_CARD + 25, T_CARD_OUT, T_CARD_OUT + 25)
+  Show(card, f < T_CARD_OUT + 26)
+  banner.Update(f)
+  // no fade at either end, he's walking through both cuts
+  SetShade(GRADE_H)
+  Sfx()
+
+
+// ---------------------------------------------------------------- the film calls these
+
+// the game draws every canvas cell even off screen, so they get no width while parked
+func Park()
+  parkW = []
+  for c : parkable
+    parkW.Add(c.w)
+    c.w = 0
+
+func Unpark()
+  for i = 0 .. parkable.Count() - 1
+    var c = parkable[i]
+    c.w = parkW[i]
+
+// built during the scene before so its lights are ready, parked off screen (ui.Remove would throw it away)
+func Warm()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+    root.x = OFF
+    parked = true
+    Park()
+    // building is heavy enough for one frame
+    return
+  RunJobs()
+
+func Update()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+  ?parked
+    root.x = 0
+    parked = false
+    Unpark()
+  ?!attached
+    ui.root.Add(root)
+    attached = true
+  RunJobs()
+  Frame()
+  ?f <= T_END
+    f++
+  :
+    over = true
+
+// off screen while another scene plays
+func Detach()
+  ?attached
+    ui.root.Remove(root)
+    attached = false
+
+// back to the start for a rewatch
+func Reset()
+  f = 0
+  over = false
+  camLead = 0
+  lastHx = 0
+  stillFor = 0

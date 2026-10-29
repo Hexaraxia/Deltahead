@@ -1,0 +1,811 @@
+// One must imagine the deltahead happy
+// Scene 4: Paths through the dark
+//
+// he climbs out of the chimney into Hans's shipping passage. a Giant chest slips off the line in
+// front of him, full of plain stone gear he has no use for, so he leaves it. then the Controller
+// (the Hunter, in a hood) comes through scoring the rock with his whip, stops at the pile, follows
+
+var spr1 = import Deltahead/Art1Sprites
+var spr2 = import Deltahead/Art2Sprites
+var spr3 = import Deltahead/Art3Sprites
+var world = import Deltahead/Art4Passage
+// the place and its stars, as the game shows them
+var banner = new Deltahead/Banner
+var spr = import Deltahead/Art4Sprites
+var look = import Deltahead/Look
+// viewer options (flashes, shake). no comment on an import line or the game can't read the file
+var opt = import Deltahead/Options
+
+// timing, in frames (the rest are set in Build, from these)
+var T_CARD = 24         // the card fades in over him climbing out
+var T_CARD_OUT = 120
+var T_HANDS = 8         // his hands come up over the edge (scene 3 cuts as he climbs out of sight)
+var T_WALK = 96         // he sets off along the route
+var T_STOP = 0          // he stops where the chest will come down
+var T_DROP = 0          // its hook slips
+var T_LAND = 0          // it hits the floor
+var T_OPEN = 0          // he lifts the lid
+var T_ITEMS = 0         // the gear bursts out
+var T_PICK = 0          // he picks up a shield
+var T_TOSS = 0          // and throws it back
+var T_GO = 0            // and walks on
+var T_HUNT = 0          // the Hunter comes through
+var T_PAUSE = 0         // stops at the pile
+var T_ON = 0            // follows
+var T_SNOW = 0          // cold air coming down the passage from where they've gone
+var T_END = 0
+
+var WALK_V = 0.4
+var HUNT_V = 0.42
+var TROLLEY_V = 0.35
+var HOLE_X = 24         // where he comes up (his head's column)
+var STOP_X = 98         // where he stops for the chest
+var CHEST_C = 106       // the chest's middle column
+var PAUSE_X = 95        // where the Hunter stops
+
+var f = 0
+var built = false
+var over = false
+var attached = false
+var parked = false
+var parkable = []       // canvases that get zero width while it waits (Park)
+var parkW = []
+var W = 0
+var H = 0
+var cx = 0
+var cy = 0
+var camX = 0
+var camY = 0
+var CAM_HOLD = 0        // where the camera stays once he's at the chest
+var chestTop0 = 0       // the chest's top row on the line, where it drops from
+var GRADE = "#d2e2e0"     // cool, with a bit of the mushrooms' cyan
+var glowX = 0.0         // where he is, for the light that follows him
+var glowY = 0.0
+var SHADOW = "#141c1b"     // the Hunter coming out of the dark
+var CLOAK = "#02e5ff"      // the game tints a foe all over in its tier's color
+var CYAN = "#7fe3de"
+var shadeCol = ""
+var invis = ui.AddStyle("#########")
+var OFF = -1000
+
+var root = null
+var backdrop = []
+var shade = []
+var bars = []
+var card = null
+var pFar = null
+var pMidL = null
+var pMidR = null
+var pLip = null
+var pFront = null
+var drips = []
+var crate = null
+var trolley = null
+var chest = null
+var dust = null
+var marks = []
+var items = []
+var heart = null
+var heroR = null
+var heroL = null
+var climbR = null
+var climbL = null
+var hunterR = null
+var hunterS = null
+var drag = null
+var spores = []
+var mushGlow = []
+var chestGlow = null
+var himGlow = null
+var sparkGlow = null
+var burst = null
+var itemGlints = []
+var sparks = []
+var snow = []
+var vig = []
+var allLights = []
+var lightW = []          // each light's width (zero while it's off)
+var jobs = []
+
+// where each piece of gear lands, and what it is (sword, shield, crossbow, wand, staff, runestone)
+var ITEM_DX = [-9, -6, -4, -1, 3, 5, 8, 11, -12, 9, -3, 14]
+var ITEM_Y = [27, 25, 28, 27, 28, 25, 27, 26, 26, 24, 28, 27]
+var MARK_N = 52
+
+
+// ---------------------------------------------------------------- building
+
+func Place(c, x, y)
+  c.anchor = "top_left"
+  c.dock = "top_left"
+  c.x = x
+  c.y = y
+
+func MakeAnim(layers, x, y)
+  var a = ui.AddAnim(layers[0][1])
+  root.Add(a)
+  Place(a, x, y)
+  a.color = layers[0][0]
+  ?layers.Count() > 1
+    for i = 1 .. layers.Count() - 1
+      var l = a.AddLayer(layers[i][1])
+      l.color = layers[i][0]
+  return a
+
+func MakeCanvas(x, y, w, h, blend)
+  var c = ui.AddCanvas()
+  parkable.Add(c)
+  root.Add(c)
+  Place(c, x, y)
+  c.w = w
+  c.h = h
+  c.blend = blend
+  c.SetFG("#000000")
+  c.SetBG("#000000")
+  return c
+
+// canvases top out at 100 x 27 cells, so screen sized ones get tiled
+func Tiles(blend, y0, rows)
+  var list = []
+  for j = 0 .. (rows - 1) / 27
+    for i = 0 .. (W - 1) / 100
+      var c = MakeCanvas(i * 100, y0 + j * 27, IMin(100, W - i * 100), IMin(27, rows - j * 27), blend)
+      list.Add(c)
+  return list
+
+func Solid(list)
+  for c : list
+    c.Set(" ")
+
+func MakeText(s)
+  var t = ui.AddText(s)
+  root.Add(t)
+  t.anchor = "center_center"
+  t.dock = "center_center"
+  t.x = 0
+  t.y = 0
+  t.w = string.Size(s) + 2
+  t.h = 1
+  t.align = "center"
+  t.color = "#000000"
+  return t
+
+// a light: an additive canvas fading out from the center, filled a bit each frame
+func QueueHalo(w, h, r, g, b, bgk)
+  var c = MakeCanvas(OFF, 0, w, h, "add")
+  jobs.Add([c, w, h, r, g, b, bgk, 0])
+  allLights.Add(c)
+  lightW.Add(w)
+  c.w = 0
+  return c
+
+func RunJobs()
+  look.Run()
+  ?jobs.Count() = 0
+    return
+  var j = jobs[0]
+  var total = j[1] * j[2]
+  var last = IMin(total - 1, j[7] + 150)
+  var hx = (j[1] - 1) / 2.0
+  var hy = (j[2] - 1) / 2.0
+  for i = j[7] .. last
+    var x = i % j[1]
+    var y = i / j[1]
+    var dx = (x - hx) / (hx + 0.5)
+    var dy = (y - hy) / (hy + 0.5)
+    var k = 1.0 - math.Sqrt(dx * dx + dy * dy)
+    ?k > 0
+      k = k * k
+      j[0].SetFG(x, y, color.FromRGB(math.RoundToInt(j[3] * k), math.RoundToInt(j[4] * k), math.RoundToInt(j[5] * k)))
+      j[0].SetBG(x, y, color.FromRGB(math.RoundToInt(j[3] * k * j[6]), math.RoundToInt(j[4] * k * j[6]), math.RoundToInt(j[5] * k * j[6])))
+  j[7] = last + 1
+  ?j[7] >= total
+    jobs.RemoveAt(0)
+
+func Build()
+  built = true
+  W = screen.w
+  H = screen.h
+  cx = W / 2
+  cy = H / 2
+  camY = world.floor - (cy + 7)
+  CAM_HOLD = STOP_X - (cx - 6)
+  T_STOP = T_WALK + math.CeilToInt((STOP_X - HOLE_X) / WALK_V)
+  T_DROP = T_STOP + 6
+  chestTop0 = math.FloorToInt(world.ropeY[CHEST_C]) + 2
+  T_LAND = T_DROP + math.CeilToInt(math.Sqrt((22 - chestTop0) / 0.05))
+  T_OPEN = T_LAND + 40
+  T_ITEMS = T_OPEN + 40
+  T_PICK = T_ITEMS + 60
+  T_TOSS = T_PICK + 34
+  T_GO = T_TOSS + 24
+  T_HUNT = T_GO + math.CeilToInt((CAM_HOLD + W + 6 - 100) / WALK_V) + 50
+  T_PAUSE = T_HUNT + math.CeilToInt((PAUSE_X - (CAM_HOLD - 10)) / HUNT_V)
+  T_ON = T_PAUSE + 45
+  T_SNOW = T_ON + 40
+  // a bit after the Hunter's gone, scene 5 cuts in on a gust of snow
+  T_END = T_ON + math.CeilToInt((CAM_HOLD + W + 12 - PAUSE_X) / HUNT_V) + 50
+  disable hud
+  disable player
+  disable banner
+  storage.Set("hidHud", true)
+
+  root = ui.AddPanel()
+  root.style = invis
+  root.anchor = "top_left"
+  root.dock = "top_left"
+  root.x = 0
+  root.y = 0
+  root.w = W
+  root.h = H
+  attached = true
+
+  // back to front: cave, passage, drips, the line's loads, chest, marks and gear, him, the Hunter,
+  // the hole's near lip, spores, near rock, then lights, shade, bars and words
+  backdrop = Tiles("opaque", 0, H)
+  Solid(backdrop)
+  pFar = MakeAnim(world.far, 0, 0)
+  pMidL = MakeAnim(world.midL, 0, 0)
+  pMidR = MakeAnim(world.midR, 0, 0)
+  for i = 0 .. 1
+    drips.Add(MakeAnim(spr1.drip14, 0, 0))
+  crate = MakeAnim(spr.crate, 0, 0)
+  trolley = MakeAnim(spr.trolley, 0, 0)
+  chest = MakeAnim(spr.giant, 0, 0)
+  dust = MakeAnim(spr1.dust, 0, 0)
+  for i = 0 .. MARK_N - 1
+    marks.Add(MakeAnim(spr.mark, 0, 0))
+  for i = 0 .. 11
+    var it = MakeAnim(spr.item, 0, 0)
+    it.frame = i % 6
+    items.Add(it)
+  heart = MakeAnim(spr.heart, 0, 0)
+  burst = MakeAnim(spr2.spark, 0, 0)
+  for i = 0 .. 3
+    itemGlints.Add(MakeAnim(spr2.glint, 0, 0))
+  heroR = MakeAnim(spr2.heroR, 0, 0)
+  heroL = MakeAnim(spr2.heroL, 0, 0)
+  climbR = MakeAnim(spr3.climbR, 0, 0)
+  climbL = MakeAnim(spr3.climbL, 0, 0)
+  hunterR = MakeAnim(spr.hunterR, 0, 0)
+  hunterS = MakeAnim(spr.hunterS, 0, 0)
+  drag = MakeAnim(spr.drag, 0, 0)
+  // sparks where the barbs bite the rock
+  for i = 0 .. 1
+    var s = MakeAnim(spr2.spark, 0, 0)
+    s.color = "#bff6ff"
+    sparks.Add(s)
+  pLip = MakeAnim(world.lip, 0, 0)
+  for i = 0 .. 9
+    var s = MakeAnim(spr3.mote, 0, 0)
+    s.color = "#7fe3de"
+    spores.Add(s)
+  for i = 0 .. 7
+    var s = MakeAnim(spr3.mote, 0, 0)
+    s.color = "#c8d0d8"
+    snow.Add(s)
+  pFront = MakeAnim(world.front, 0, 0)
+
+  for i = 0 .. world.mushX.Count() - 1
+    mushGlow.Add(QueueHalo(17, 7, 26, 84, 80, 0.16))
+  chestGlow = QueueHalo(21, 9, 70, 70, 66, 0.14)
+  himGlow = QueueHalo(15, 9, 40, 52, 52, 0.1)
+  sparkGlow = QueueHalo(13, 5, 70, 120, 130, 0.14)
+
+  shade = Tiles("multiply", 0, H)
+  vig = look.Vignette(root, W, H, 0.35)
+  for c : vig
+    parkable.Add(c)
+  var lb = IMax(2, H / 12)
+  for c : Tiles("opaque", 0, lb)
+    bars.Add(c)
+  for c : Tiles("opaque", H - lb, lb)
+    bars.Add(c)
+  Solid(bars)
+  card = MakeText("Somehow, he found the paths through the dark.")
+  banner.Build(root, "Paths Through the Dark", 3, 8, T_WALK - 10, lb + 1)
+
+
+// ---------------------------------------------------------------- helpers
+
+func IMin(a, b)
+  ?a < b
+    return a
+  return b
+
+func IMax(a, b)
+  ?a > b
+    return a
+  return b
+
+func Prog(a, b)
+  return math.Clamp((f - a) * 1.0 / (b - a), 0.0, 1.0)
+
+func Fade(a, b, c, d)
+  return color.Lerp("#000000", "#e7e3da", Prog(a, b) - Prog(c, d))
+
+func SetShade(col)
+  ?!string.Equals(col, shadeCol)
+    shadeCol = col
+    for c : shade
+      c.SetFG(col)
+      c.SetBG(col)
+
+func Show(c, on)
+  c.visible = on
+
+func ShowAll(list, on)
+  for c : list
+    c.visible = on
+
+// a light on its source, or off screen with zero width (the game draws every canvas wherever it is)
+func Light(c, on, x, y)
+  ?on
+    var w = lightW[allLights.IndexOf(c)]
+    c.w = w
+    c.x = x - w / 2
+    c.y = y - c.h / 2
+  :
+    c.x = OFF
+    c.w = 0
+
+// passage cell -> screen
+func SX(x)
+  return math.RoundToInt(x - camX)
+
+func SY(y)
+  return math.RoundToInt(y - camY)
+
+// the haul line's row at a column
+func RopeAt(x)
+  var i = IMax(0, IMin(world.ropeY.Count() - 1, math.RoundToInt(x)))
+  return math.FloorToInt(world.ropeY[i])
+
+// where he is along the passage (his head's column)
+func HeroX()
+  ?f < T_WALK
+    return HOLE_X
+  ?f < T_STOP
+    return HOLE_X + WALK_V * (f - T_WALK)
+  ?f < T_LAND
+    return STOP_X
+  ?f < T_LAND + 8
+    // startled back a step
+    return STOP_X - (f - T_LAND) * 0.25
+  ?f < T_LAND + 18
+    return STOP_X - 2
+  ?f < T_LAND + 28
+    return STOP_X - 2 + (f - T_LAND - 18) * 0.2
+  ?f < T_GO
+    return STOP_X
+  return STOP_X + WALK_V * (f - T_GO)
+
+func HeroAt(hx, r, frame, left)
+  var b = heroR
+  ?left
+    b = heroL
+  Show(b, true)
+  b.x = SX(hx) - 1
+  ?left
+    b.x = SX(hx) - 4
+  b.y = SY(r) - 3
+  b.frame = frame
+  glowX = hx + 1
+  glowY = r - 2
+
+func ClimbAt(hx, top, frame)
+  Show(climbR, true)
+  climbR.x = SX(hx) - 1
+  climbR.y = SY(top)
+  climbR.frame = frame
+  glowX = hx
+  glowY = top + 1
+
+// the Hunter facing right, by his head's cell, feet on row r. lit: 0 a dark shape, 1 his own colors
+func HunterAt(hx, r, frame, lit)
+  var a = hunterR
+  ?lit < 1
+    a = hunterS
+    a.color = color.Lerp(SHADOW, CLOAK, lit)
+  Show(a, true)
+  a.x = SX(hx) - 10
+  a.y = SY(r) - 3
+  a.frame = frame
+
+func HunterX()
+  ?f < T_PAUSE
+    return CAM_HOLD - 10 + HUNT_V * (f - T_HUNT)
+  ?f < T_ON
+    return PAUSE_X
+  return PAUSE_X + HUNT_V * (f - T_ON)
+
+
+// ---------------------------------------------------------------- him
+
+func Him()
+  ?f < T_HANDS
+    return
+  var x = HeroX()
+  var fl = world.floor
+  ?f < T_HANDS + 14
+    // hands come up over the edge, legs going below it
+    ClimbAt(x, fl, 1 + ((f - T_HANDS) / 4) % 2 * 2)
+  :?f < T_HANDS + 30
+    // straining up until his head clears the edge
+    ClimbAt(x, fl, 5 + ((f - T_HANDS) / 3) % 2)
+  :?f < T_HANDS + 40
+    ClimbAt(x, fl - 1, 2 + ((f - T_HANDS) / 3) % 2 * 2)
+  :?f < T_HANDS + 50
+    HeroAt(x, fl, 11, false)
+  :?f < T_HANDS + 62
+    // getting his breath back
+    HeroAt(x, fl, 9, false)
+  :?f < T_HANDS + 74
+    HeroAt(x, fl, 4, true)
+  :?f < T_WALK
+    HeroAt(x, fl, 4, false)
+  :?f < T_STOP
+    HeroAt(x, fl, (f / 6) % 4, false)
+  :?f < T_LAND
+    HeroAt(x, fl, 4, false)
+  :?f < T_LAND + 8
+    // it lands right in front of him and he jumps back
+    HeroAt(x, fl - 1, 5, false)
+  :?f < T_LAND + 18
+    HeroAt(x, fl, 4, false)
+  :?f < T_LAND + 28
+    HeroAt(x, fl, (f / 5) % 4, false)
+  :?f < T_LAND + 34
+    HeroAt(x, fl, 9, false)
+  :?f < T_PICK
+    // kneeling at it: the lid, the gear
+    HeroAt(x, fl, 11, false)
+  :?f < T_GO
+    HeroAt(x, fl, 4, false)
+  :
+    HeroAt(x, fl, (f / 6) % 4, false)
+
+
+// ---------------------------------------------------------------- the line, the chest, the gear
+
+func Line()
+  // a crate going down the line over his head, and later another
+  var x = 140 - TROLLEY_V * f
+  ?f > T_HUNT - 200
+    x = 196 - TROLLEY_V * (f - T_HUNT + 200)
+  Show(crate, x > -10 & x < 196)
+  crate.x = SX(x) - 2
+  crate.y = SY(RopeAt(x))
+  // the Giant chest riding the line down to him, then the hook slips
+  var tx = CHEST_C + TROLLEY_V * (T_DROP - f)
+  Show(trolley, tx > -4 & tx < 196)
+  trolley.x = SX(tx) - 1
+  trolley.y = SY(RopeAt(tx))
+  ?f >= T_DROP & f < T_DROP + 6
+    // the hook jerks up as the weight comes off it
+    trolley.y = trolley.y - 1
+  Show(chest, true)
+  chest.frame = 0
+  ?f < T_DROP
+    chest.x = SX(tx) - 2
+    chest.y = SY(RopeAt(tx) + 2)
+  :
+    chest.x = SX(CHEST_C) - 2
+    var t = f - T_DROP
+    chest.y = SY(IMin(22, chestTop0 + 0.05 * t * t))
+  ?f >= T_OPEN & f < T_OPEN + 8
+    chest.frame = 1
+  :?f >= T_OPEN + 8 & f < T_ITEMS + 10
+    chest.frame = 2
+  :?f >= T_ITEMS + 10
+    chest.frame = 3
+  ?f = T_LAND
+    play treasure_drop_giant
+  :?f = T_OPEN
+    play treasure_open
+  :?f = T_OPEN + 10
+    play treasure_item_show
+  :?f = T_ITEMS
+    play treasure_item_pop
+  :?f = T_TOSS + 14
+    play stone_throw_hit 140
+  // dust where it lands, and the floor jumping
+  var d = f - T_LAND
+  Show(dust, d >= 0 & d < 24)
+  dust.frame = IMax(0, d) / 4
+  dust.x = SX(CHEST_C) - 10
+  dust.y = SY(world.floor) - 4
+  ?d >= 0 & d < 4 & opt.shake
+    root.y = (d % 2) * 2 - 1
+  // the heart rising out of it, like the game shows what's in a chest
+  var hb = f - T_OPEN - 10
+  Show(heart, hb >= 0 & f < T_ITEMS)
+  heart.frame = 0
+  ?hb < 10
+    heart.frame = 1
+  heart.x = SX(CHEST_C) - 2
+  heart.y = SY(21) - IMin(3, IMax(0, hb) / 8)
+  // a flash as the gear bursts out
+  var bt = f - T_ITEMS
+  Show(burst, bt >= 0 & bt < 8)
+  burst.frame = 0
+  ?bt >= 3
+    burst.frame = 1
+  burst.x = SX(CHEST_C) - 1
+  burst.y = SY(20)
+  Light(chestGlow, jobs.Count() = 0 & hb >= 0 & f < T_ITEMS + 30, SX(CHEST_C), SY(22))
+
+// a dozen pieces of plain stone gear flying out, he picks up the shield and tosses it back
+func Gear()
+  var t = f - T_ITEMS
+  for i = 0 .. 11
+    var it = items[i]
+    Show(it, t >= 0)
+    var p = math.Clamp((t - (i % 4)) / 18.0, 0.0, 1.0)
+    var x = CHEST_C + ITEM_DX[i] * p
+    var y = 22 + (ITEM_Y[i] - 22) * p - 5 * math.Sin(p * 3.14159)
+    ?i = 1 & f >= T_PICK
+      // in his hand, held up to look at, then thrown back
+      x = HeroX() - 3
+      y = world.floor - 1
+      ?f >= T_TOSS
+        var q = math.Clamp((f - T_TOSS) / 14.0, 0.0, 1.0)
+        x = HeroX() - 3 + (CHEST_C - 5 - HeroX() + 3) * q
+        y = world.floor - 1 + 2 * q - 4 * math.Sin(q * 3.14159)
+    it.x = SX(x) - 1
+    it.y = SY(y)
+  // light catching a few of the pieces as they land
+  for g = 0 .. 3
+    var i = g * 3
+    var gl = itemGlints[g]
+    var lt = t - (i % 4) - 18
+    Show(gl, lt >= 0 & lt < 8)
+    gl.frame = 0
+    ?lt >= 4
+      gl.frame = 2
+    gl.x = SX(CHEST_C + ITEM_DX[i])
+    gl.y = SY(ITEM_Y[i]) - 1
+
+
+// ---------------------------------------------------------------- the Hunter
+
+// hooded, barbed whip dragging and scoring the rock. stops at the pile, then goes after the Pusher
+func Hunter()
+  ShowAll(marks, false)
+  ?f = T_HUNT - 40
+    // heard before he's seen: the barbs dragging over the rock
+    play blade_drag
+  ?f < T_HUNT
+    return
+  var x = HunterX()
+  var hx = math.RoundToInt(x)
+  var standing = f >= T_PAUSE & f < T_ON
+  var frame = (f / 6) % 4
+  ?standing
+    frame = 4
+  // in from the dark at the screen's edge, into the mushrooms' light
+  var lit = math.Clamp((SX(hx) - 4) / 16.0, 0.0, 1.0)
+  HunterAt(x, world.floor, frame, lit)
+  // the whip from his back hand, barbs lined up with the marks they leave
+  var hand = hx - 10 + spr.hunterHandX
+  var p = (CAM_HOLD - hand + spr.dragOX + 1000) % 2
+  var k = f % spr.dragN
+  ?standing
+    k = 0
+  Show(drag, true)
+  drag.frame = p * spr.dragN + k
+  drag.x = SX(hand) - spr.dragOX
+  drag.y = SY(world.floor - 3 + spr.hunterHandY) - spr.dragOY
+  drag.color = color.Lerp(SHADOW, CLOAK, lit)
+  // a barb throws a spark now and then, the only light on him till he reaches the mushrooms
+  var walking = !standing & f < T_END
+  var lightOn = false
+  for i = 0 .. 1
+    var sp = sparks[i]
+    var st = (f - T_HUNT + i * 7) % 13
+    var n = (f - T_HUNT + i * 7) / 13
+    var on = walking & st < 3
+    Show(sp, on)
+    sp.frame = 1
+    sp.x = SX(hand - spr.dragReach + 2 + (n * 7 + i * 4) % 9) - 1
+    sp.y = SY(world.floor) - 2
+    ?on & st < 2 & !lightOn
+      lightOn = true
+      Light(sparkGlow, jobs.Count() = 0, sp.x + 1, sp.y + 1)
+  // the marks, laid as the whip passes, fresh ones brighter
+  var tail = hand - spr.dragReach
+  for i = 0 .. MARK_N - 1
+    var m = marks[i]
+    var mx = CAM_HOLD - 16 + i * 2
+    Show(m, mx <= tail + 4)
+    m.x = SX(mx)
+    m.y = SY(world.floor)
+    // gray like the rock, only the whip itself is cyan
+    m.color = color.Lerp(SHADOW, "#3a3a3a", lit)
+    ?tail < mx + 20
+      m.color = color.Lerp(SHADOW, "#525252", lit)
+
+
+// ---------------------------------------------------------------- life
+
+func Life(lit)
+  // the mushrooms' light
+  for i = 0 .. mushGlow.Count() - 1
+    Light(mushGlow[i], lit, SX(world.mushX[i]), SY(world.mushY[i]))
+  // spores drifting up off them
+  for i = 0 .. 9
+    var s = spores[i]
+    var k = i % world.mushX.Count()
+    var age = (f + i * 47) % 150
+    Show(s, age < 120)
+    s.x = SX(world.mushX[k] + (i % 3) - 1 + math.Sin(age * 0.05 + i) * 1.5)
+    s.y = SY(world.mushY[k] - age * 0.07)
+    s.frame = 0
+  // after they've gone, a cold draft with snow in it comes down the passage
+  for i = 0 .. 7
+    var s = snow[i]
+    var t0 = T_SNOW + i * 11
+    var a = f - t0
+    var sx = W + 1 - a * (0.55 + (i % 3) * 0.12)
+    Show(s, a >= 0 & sx > -1)
+    s.x = math.RoundToInt(sx)
+    s.y = 7 + (i * 7) % 15 + math.RoundToInt(a * 0.04 + math.Sin(a * 0.09 + i) * 0.8)
+    s.frame = i % 3
+  // drips off the stalactites, down to the back of the floor
+  for i = 0 .. 1
+    var d = drips[i]
+    var ph = (f + i * 41) % 80
+    Show(d, ph < 17)
+    d.frame = IMin(16, ph)
+    d.x = SX(58 + i * 66) - 1
+    d.y = SY(8 + i)
+
+
+// ---------------------------------------------------------------- sounds
+
+// his and the Hunter's sounds (the chest's are in Line): the climb, the pulley, the hook, the shield, the barbs
+func Sfx()
+  ?f = T_HANDS
+    play pickup_stone 80
+  :?f = T_HANDS + 16
+    play stone_throw_hit 60
+  :?f = T_HANDS + 32
+    play grappling_idle 75
+  :?f = T_HANDS + 41
+    play waterfall_land 85
+  :?f = T_DROP
+    play waterfall_hook_hit 90
+  :?f = T_DROP + 3
+    play skeleton_boss_arm_woosh 70
+  :?f = T_LAND + 2
+    // he jumps back
+    play mine_walker_step 120
+  :?f = T_PICK + 2
+    play pickup_stone 100
+  :?f = T_TOSS
+    play stone_throw_cast 90
+  :?f = T_HUNT - 18
+    play blade_drag 82
+  :?f = T_PAUSE + 3
+    play controller_whip_back 72
+  :?f = T_ON
+    play blade_drag 95
+  :?f = T_END - 45
+    // the wind coming down the passage
+    play air_hiss 92
+  // the pulley over a crate going by
+  var x = 140 - TROLLEY_V * f
+  ?f > T_HUNT - 200
+    x = 196 - TROLLEY_V * (f - T_HUNT + 200)
+  ?f % 100 = 35 & x > camX & x < camX + W
+    play grappling_idle @88 + (f / 100) % 3 * 9@
+  // the barbs on the rock as he walks
+  ?f > T_HUNT + 20 & (f < T_PAUSE | f > T_ON + 30) & f < T_END - 50 & (f - T_HUNT) % 52 = 0
+    play blade_drag @78 + (f / 52) % 3 * 8@
+
+
+// ---------------------------------------------------------------- the frame
+
+func Frame()
+  for c : allLights
+    c.x = OFF
+    c.w = 0
+  Show(heroR, false)
+  Show(heroL, false)
+  Show(climbR, false)
+  Show(climbL, false)
+  Show(hunterR, false)
+  Show(hunterS, false)
+  Show(drag, false)
+  ShowAll(sparks, false)
+  root.x = 0
+  root.y = 0
+
+  // camera follows him, then holds at the chest while he goes on
+  camX = IMax(0, IMin(CAM_HOLD, math.RoundToInt(HeroX()) - (cx - 6)))
+  pFar.x = -math.RoundToInt(camX * 0.6)
+  pFar.y = SY(0)
+  pMidL.x = SX(0)
+  pMidL.y = SY(0)
+  pMidR.x = SX(world.midSplit)
+  pMidR.y = SY(0)
+  pLip.x = SX(world.holeX0 - 1)
+  pLip.y = SY(27)
+  pFront.x = -math.RoundToInt(camX * 1.4)
+  pFront.y = SY(0)
+
+  var lit = jobs.Count() = 0
+  Him()
+  Line()
+  Gear()
+  Hunter()
+  Life(lit)
+  Light(himGlow, lit & f >= T_HANDS & f < T_GO + 200, SX(glowX), SY(glowY))
+  Sfx()
+
+  card.color = Fade(T_CARD, T_CARD + 25, T_CARD_OUT, T_CARD_OUT + 25)
+  Show(card, f < T_CARD_OUT + 26)
+  banner.Update(f)
+  // no fade either end: in on his hands, out on the gust that opens scene 5
+  SetShade(GRADE)
+  ?f = 0
+    ambient.Stop()
+    ambient.Add("ambient_caves")
+
+
+// ---------------------------------------------------------------- the film calls these
+
+// a scene built ahead waits off screen and the game still draws its canvases, so zero their width till it's on
+func Park()
+  parkW = []
+  for c : parkable
+    parkW.Add(c.w)
+    c.w = 0
+
+func Unpark()
+  for i = 0 .. parkable.Count() - 1
+    var c = parkable[i]
+    c.w = parkW[i]
+
+// built during the scene before so the lights are ready, parked off to the side (ui.Remove would throw it away)
+func Warm()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+    root.x = OFF
+    parked = true
+    Park()
+    // building is heavy enough for one frame
+    return
+  RunJobs()
+
+func Update()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+  ?parked
+    root.x = 0
+    parked = false
+    Unpark()
+  ?!attached
+    ui.root.Add(root)
+    attached = true
+  RunJobs()
+  Frame()
+  ?f <= T_END
+    f++
+  :
+    over = true
+
+// take its picture off the screen (another scene is playing)
+func Detach()
+  ?attached
+    ui.root.Remove(root)
+    attached = false
+
+// back to the start, for watching again
+func Reset()
+  f = 0
+  over = false

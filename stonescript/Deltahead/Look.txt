@@ -1,0 +1,79 @@
+// One must imagine the deltahead happy
+// the vignette every scene shares, edges a bit darker than the middle.
+// call Vignette in Build (over the picture, under the words) and Run every frame till
+// it's filled, ~120 cells a frame. shades get worked out once and copied after that
+
+var jobs = []
+var shades = []         // each cell's shade, in fill order
+var shadesKey = -1      // screen size and strength they're for
+
+func Min(a, b)
+  ?a < b
+    return a
+  return b
+
+// multiply canvases tiled over the screen (a canvas tops out at 100x27).
+// strength is how dark the corners go (0.3 = 70%)
+func Vignette(parent, W, H, strength)
+  var kind = W * 100000 + H * 100 + math.RoundToInt(strength * 100)
+  ?shadesKey < 0
+    shadesKey = kind
+  var base = 0
+  ?kind ! shadesKey
+    // not the same as the first one, so it gets worked out, not copied
+    base = -1
+  var list = []
+  for j = 0 .. (H - 1) / 27
+    for i = 0 .. (W - 1) / 100
+      var c = ui.AddCanvas()
+      parent.Add(c)
+      c.anchor = "top_left"
+      c.dock = "top_left"
+      c.x = i * 100
+      c.y = j * 27
+      c.w = Min(100, W - i * 100)
+      c.h = Min(27, H - j * 27)
+      c.blend = "multiply"
+      c.SetFG("#ffffff")
+      c.SetBG("#ffffff")
+      list.Add(c)
+      // keep the size in the job, a scene waiting to come on sets its canvases to 0 width while this still fills
+      jobs.Add([c, i * 100, j * 27, W, H, strength, 0, base, c.w, c.h])
+      ?base >= 0
+        base = base + c.w * c.h
+  return list
+
+// fills them, darker the further from the middle (an oval, like the screen)
+func Run()
+  ?jobs.Count() = 0
+    return
+  var j = jobs[0]
+  var c = j[0]
+  var cw = j[8]
+  var total = cw * j[9]
+  var last = Min(total - 1, j[6] + 120)
+  for k = j[6] .. last
+    var x = k % cw
+    var y = k / cw
+    var pos = j[7] + k
+    var col = ""
+    ?j[7] >= 0 & pos < shades.Count()
+      col = shades[pos]
+    :
+      var dx = (j[1] + x + 0.5 - j[3] / 2.0) / (j[3] / 2.0)
+      var dy = (j[2] + y + 0.5 - j[4] / 2.0) / (j[4] / 2.0)
+      var r = math.Sqrt(dx * dx * 0.8 + dy * dy * 0.7)
+      var v = 1.0 - j[5] * math.Clamp((r - 0.5) / 0.7, 0.0, 1.0)
+      var g = math.RoundToInt(255 * v)
+      col = color.FromRGB(g, g, g)
+      ?j[7] >= 0 & pos = shades.Count()
+        shades.Add(col)
+    c.SetFG(x, y, col)
+    c.SetBG(x, y, col)
+  j[6] = last + 1
+  ?j[6] >= total
+    jobs.RemoveAt(0)
+
+// all filled
+func Ready()
+  return jobs.Count() = 0

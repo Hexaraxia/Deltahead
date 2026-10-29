@@ -1,0 +1,18 @@
+// preview only (not in the package): scene 16 into 17 the way Main does it, 17 built ahead and cutting in
+// under 16's music. render from near the end of 16. the simulator runs it instead of Main
+
+var film16 = new Deltahead/Scene16
+var film17 = new Deltahead/Scene17
+var part = 16
+
+?string.Equals(loc.id, "waterfall")
+  ?part = 16
+    film16.Update()
+    ?film16.f >= film16.T_END - 150
+      film17.Warm()
+    ?film16.over
+      film16.Detach()
+      part = 17
+      film17.Update()
+  :
+    film17.Update()

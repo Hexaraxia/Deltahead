@@ -1,0 +1,6 @@
+// preview only (not in the package): plays scene 16 by itself. the simulator runs it instead of Main
+
+var film = new Deltahead/Scene16
+
+?string.Equals(loc.id, "waterfall")
+  film.Update()

@@ -1,0 +1,55 @@
+// One must imagine the deltahead happy
+// Moonlit glints on the snow, shared by the scenes up on the heights.
+// call Make in Build (over the ground, under the figures) and Update every frame.
+// holes are from/to column pairs where there's no ground
+
+var art = import Deltahead/Art5Sprites
+var OFF = -1000
+
+// returns [anims, world columns, rows]
+func Make(parent, n)
+  var list = []
+  var xs = []
+  var rs = []
+  for i = 0 .. n - 1
+    var a = ui.AddAnim(art.twinkle[0][1])
+    parent.Add(a)
+    a.anchor = "top_left"
+    a.dock = "top_left"
+    a.x = OFF
+    a.y = 0
+    a.color = "#dfe6ec"
+    list.Add(a)
+    xs.Add(-1)
+    rs.Add(0)
+  return [list, xs, rs]
+
+// each glint flares on its own beat, then comes back somewhere else in view.
+// whole cells against the camera so it stays put on the ground
+func Update(g, f, camX, camY, W, feet0, feet1, ww, back, front, holes, on)
+  var list = g[0]
+  var xs = g[1]
+  var rs = g[2]
+  for i = 0 .. list.Count() - 1
+    var a = list[i]
+    var per = 46 + (i * 13) % 31
+    var ph = (f + i * 17) % per
+    var cyc = (f + i * 17) / per
+    ?ph = 0 | xs[i] = -1
+      var x = camX + 3 + (cyc * 37 + i * 23) % (W - 6)
+      var mid = feet0 + (feet1 - feet0) * x * 1.0 / ww
+      xs[i] = x
+      rs[i] = math.FloorToInt(mid) - back + 1 + (cyc + i * 2) % (back + front)
+      ?holes.Count() > 0
+        for k = 0 .. holes.Count() / 2 - 1
+          ?x >= holes[k * 2] & x < holes[k * 2 + 1]
+            // no ground there, skip this beat
+            xs[i] = -2
+    var show = on & ph < 16 & xs[i] >= 0
+    a.visible = show
+    ?show
+      a.x = xs[i] - camX
+      a.y = rs[i] - camY
+      a.frame = ph / 4
+    :
+      a.x = OFF

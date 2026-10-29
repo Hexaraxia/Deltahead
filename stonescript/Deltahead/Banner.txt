@@ -1,0 +1,94 @@
+// One must imagine the deltahead happy
+// the location banner: a place's name and its stars like the game shows them,
+// colored by tier. the count ticks up from the last place's stars.
+// call Build once with the scene's root panel, then Update every frame
+
+var nameText = null
+var starText = null
+var placeName = ""
+var fromStars = 0
+var toStars = 0
+var t0 = 0
+var row = 0
+var TICK = 9            // frames per star while counting
+var HOLD = 120          // how long it stays once counted
+
+func Build(root, name, from, to, at, y)
+  placeName = name
+  fromStars = from
+  toStars = to
+  t0 = at
+  row = y
+  nameText = MakeText(root, name)
+  starText = MakeText(root, Stars(to))
+
+func MakeText(root, s)
+  var t = ui.AddText(s)
+  root.Add(t)
+  t.anchor = "top_center"
+  t.dock = "top_center"
+  t.x = 0
+  t.y = 0
+  t.w = string.Size(s) + 4
+  t.h = 1
+  t.align = "center"
+  t.color = "#000000"
+  t.visible = false
+  return t
+
+// star rating the way the game writes it
+func Stars(n)
+  ?n <= 0
+    return ""
+  ?n = 1
+    return "☆"
+  ?n = 2
+    return "☆☆"
+  ?n = 3
+    return "☆☆☆"
+  return "☆" + n + "☆"
+
+func TierColor(n)
+  ?n <= 5
+    return "#ffffff"
+  ?n <= 10
+    return "#7fe3de"
+  ?n <= 15
+    return "#ffff62"
+  return "#32da5a"
+
+func Update(f)
+  var t = f - t0
+  var count = toStars - fromStars
+  var total = 20 + count * TICK + HOLD
+  var on = t >= 0 & t < total + 30
+  nameText.visible = on
+  starText.visible = on
+  ?!on
+    return
+  // in, held, out
+  var a = math.Clamp(t / 20.0, 0.0, 1.0) - math.Clamp((t - total) / 30.0, 0.0, 1.0)
+  var n = fromStars + IMax(0, IMin(count, (t - 20) / TICK + 1))
+  ?t < 20
+    n = fromStars
+  nameText.y = row
+  starText.y = row + 1
+  nameText.color = color.Lerp("#000000", "#e7e3da", a)
+  starText.text = Stars(n)
+  starText.w = string.Size(Stars(n)) + 4
+  starText.color = color.Lerp("#000000", TierColor(n), a)
+  // a tick per star, then the new-star sound
+  ?t >= 20 & t < 20 + count * TICK & (t - 20) % TICK = 0
+    play progress_@IMin(9, (t - 20) / TICK + 1)@
+  ?t = 20 + count * TICK
+    play ui_starnew
+
+func IMin(a, b)
+  ?a < b
+    return a
+  return b
+
+func IMax(a, b)
+  ?a > b
+    return a
+  return b

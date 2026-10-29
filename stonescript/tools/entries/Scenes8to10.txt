@@ -1,0 +1,31 @@
+// preview only (not in the package): scenes 8, 9 and 10 the way Main does it, each built ahead and cutting
+// straight in. render from the Emerald Egg, frame 2580
+
+var film8 = new Deltahead/Scene8
+var film9 = null
+var film10 = null
+var part = 8
+
+?string.Equals(loc.id, "waterfall")
+  ?part = 8
+    film8.Update()
+    ?film8.f >= film8.T_END - 90
+      ?film9 = null
+        film9 = new Deltahead/Scene9
+      film9.Warm()
+    ?film8.over
+      film8.Detach()
+      part = 9
+      film9.Update()
+  :?part = 9
+    film9.Update()
+    ?film9.f >= film9.T_END - 90
+      ?film10 = null
+        film10 = new Deltahead/Scene10
+      film10.Warm()
+    ?film9.over
+      film9.Detach()
+      part = 10
+      film10.Update()
+  :
+    film10.Update()

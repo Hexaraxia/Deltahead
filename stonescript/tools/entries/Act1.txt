@@ -1,0 +1,18 @@
+// preview only (not in the package): act 1 (scenes 1 and 2) the way Main does it, scene 2 built ahead
+// and cutting straight in. the simulator runs it instead of Main
+
+var film1 = new Deltahead/Scene1
+var film2 = new Deltahead/Scene2
+var part = 1
+
+?string.Equals(loc.id, "waterfall")
+  ?part = 1
+    film1.Update()
+    ?film1.f >= film1.T_END - 90
+      film2.Warm()
+    ?film1.over
+      film1.Detach()
+      part = 2
+      film2.Update()
+  :
+    film2.Update()

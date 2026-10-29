@@ -1,0 +1,53 @@
+// preview only (not in the package): end of act 1 into act 2 (scenes 2 to 6) the way Main does it, each scene
+// built ahead and cutting straight in. the simulator runs it instead of Main, render from frame 1240 (the fall)
+
+var film2 = new Deltahead/Scene2
+var film3 = null
+var film4 = null
+var film5 = null
+var film6 = null
+var part = 2
+
+?string.Equals(loc.id, "waterfall")
+  ?part = 2
+    film2.Update()
+    ?film2.f >= film2.T_END - 90
+      ?film3 = null
+        film3 = new Deltahead/Scene3
+      film3.Warm()
+    ?film2.over
+      film2.Detach()
+      part = 3
+      film3.Update()
+  :?part = 3
+    film3.Update()
+    ?film3.f >= film3.T_END - 90
+      ?film4 = null
+        film4 = new Deltahead/Scene4
+      film4.Warm()
+    ?film3.over
+      film3.Detach()
+      part = 4
+      film4.Update()
+  :?part = 4
+    film4.Update()
+    ?film4.f >= film4.T_END - 90
+      ?film5 = null
+        film5 = new Deltahead/Scene5
+      film5.Warm()
+    ?film4.over
+      film4.Detach()
+      part = 5
+      film5.Update()
+  :?part = 5
+    film5.Update()
+    ?film5.f >= film5.T_END - 90
+      ?film6 = null
+        film6 = new Deltahead/Scene6
+      film6.Warm()
+    ?film5.over
+      film5.Detach()
+      part = 6
+      film6.Update()
+  :
+    film6.Update()

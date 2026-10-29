@@ -1,0 +1,52 @@
+// One must imagine the deltahead happy
+// The viewer's choices, asked by Main before the film starts. every scene imports
+// this and gets the same one. kept in storage so they're remembered next time
+
+var flashes = true       // big flashes of light
+var shake = true         // camera shake
+
+func Load()
+  flashes = storage.Get("dhFlashes", true)
+  shake = storage.Get("dhShake", true)
+
+func Save()
+  storage.Set("dhFlashes", flashes)
+  storage.Set("dhShake", shake)
+
+// set by Main while the film has the screen, so Wear keeps out of its way. not saved
+var filmOn = false
+
+// the rainbow Deltahead, for watching to the end (or the YouTube line). each script
+// has its own storage, so everything reads and sets it through here
+func Unlock()
+  storage.Set("unlocked", true)
+
+func Unlocked()
+  return storage.Get("unlocked", false)
+
+// times watched to the end: the Deltahead on the first, then a Boulder each time
+// after, a tier higher. the YouTube line counts as one, and so does an unlock with
+// no count saved
+func Seen()
+  var n = storage.Get("seen", 0)
+  ?n < 1 & storage.Get("unlocked", false)
+    n = 1
+  return n
+
+func See()
+  storage.Set("seen", Seen() + 1)
+  storage.Set("unlocked", true)
+
+func BoulderUnlocked()
+  return Seen() >= 2
+
+// the YouTube line: rainbow Deltahead and one watch counted, only the first time
+func Thanks()
+  ?!storage.Get("thanked", false)
+    storage.Set("thanked", true)
+    ?Seen() < 1
+      storage.Set("seen", 1)
+    storage.Set("unlocked", true)
+
+// set by the YouTube video's own entry: the end shows the YouTube line, then closes
+var video = false

@@ -1,0 +1,100 @@
+// One must imagine the deltahead happy
+// the 3D ∆ in the stars (scene 16). each place sees it from its own side.
+// call Make in Build (behind the shot's land), then Update every frame: stars
+// light from the top, then lines join them, drawn into a canvas a few cells a frame
+
+var art = import Deltahead/ArtDelta3D
+var OFF = -1000
+// each view: w, h, its stars (x, y, kind), its lines (x, y, which part, glyphs)
+var VIEWS = [[art.w0, art.h0, art.starX0, art.starY0, art.starKind0, art.lineX0, art.lineY0, art.lineClass0, art.lineS0], [art.w1, art.h1, art.starX1, art.starY1, art.starKind1, art.lineX1, art.lineY1, art.lineClass1, art.lineS1], [art.w2, art.h2, art.starX2, art.starY2, art.starKind2, art.lineX2, art.lineY2, art.lineClass2, art.lineS2], [art.w3, art.h3, art.starX3, art.starY3, art.starKind3, art.lineX3, art.lineY3, art.lineClass3, art.lineS3], [art.w4, art.h4, art.starX4, art.starY4, art.starKind4, art.lineX4, art.lineY4, art.lineClass4, art.lineS4]]
+// line colors: front ∆, edges going back, back ∆
+var LINE_C = ["#5e6678", "#464d5c", "#363b46"]
+
+// returns [view, stars, canvas, order the stars light in, line cells drawn so far]
+func Make(p, k)
+  var v = VIEWS[k]
+  var stars = []
+  for i = 0 .. v[2].Count() - 1
+    var a = ui.AddAnim(art.star[0][1])
+    p.Add(a)
+    a.anchor = "top_left"
+    a.dock = "top_left"
+    a.x = OFF
+    a.y = 0
+    a.color = "#ffffff"
+    stars.Add(a)
+  var c = ui.AddCanvas()
+  p.Add(c)
+  c.anchor = "top_left"
+  c.dock = "top_left"
+  c.x = OFF
+  c.y = 0
+  c.w = v[0]
+  c.h = v[1]
+  c.blend = "opaque"
+  c.Set("#")
+  // the stars light from the top down
+  var order = []
+  for i = 0 .. v[2].Count() - 1
+    order.Add(i)
+  for i = 0 .. order.Count() - 2
+    for j = i + 1 .. order.Count() - 1
+      ?v[3][order[j]] < v[3][order[i]]
+        var tmp = order[i]
+        order[i] = order[j]
+        order[j] = tmp
+  return [v, stars, c, order, 0]
+
+// x, y is its top-left on screen, t frames since it started. a star lights every gap
+// frames, white for rain frames then rainbow; lines start at lineAt, rate cells a frame.
+// on = false parks it all off screen
+func Update(s, x, y, t, gap, rain, lineAt, rate, on)
+  var v = s[0]
+  var stars = s[1]
+  var c = s[2]
+  ?!on
+    c.x = OFF
+    for a : stars
+      a.x = OFF
+    return
+  c.x = x
+  c.y = y
+  for n = 0 .. s[3].Count() - 1
+    var i = s[3][n]
+    var a = stars[i]
+    var lit = t - n * gap
+    ?lit < 0
+      a.x = OFF
+    :
+      a.x = x + v[2][i]
+      a.y = y + v[3][i]
+      // twinkle up to bright, then keep twinkling a little
+      a.frame = IMin(2, lit / 3)
+      ?lit >= 12 & (t / 9 + i * 3) % 7 = 0
+        a.frame = 3
+      ?v[4][i] = 1 & a.frame = 2
+        a.frame = 1
+      ?lit < rain
+        a.color = "#ffffff"
+      :
+        a.color = "#rainFF"
+  // a few more line cells each frame
+  var want = IMin(v[5].Count(), math.FloorToInt(IMax(0, t - lineAt) * rate))
+  ?want > s[4]
+    for k = s[4] .. want - 1
+      c.Set(v[5][k], v[6][k], LINE_C[v[7][k]], "#000000", string.Sub(v[8], k, 1))
+    s[4] = want
+
+// all lines drawn
+func Formed(s)
+  return s[4] >= s[0][5].Count()
+
+func IMin(a, b)
+  ?a < b
+    return a
+  return b
+
+func IMax(a, b)
+  ?a > b
+    return a
+  return b

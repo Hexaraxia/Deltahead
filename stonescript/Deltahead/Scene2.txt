@@ -1,0 +1,1140 @@
+// One must imagine the deltahead happy
+// Scene 2: The Bomb Cart
+//
+// the Controller sends an old Bomb Cart down the rails after him. the blast wrecks his cart and
+// knocks a Humble chest out of the rock. he takes the sword, swings back for the first time and
+// drops down the crack. everything runs off one frame counter, 30 a second
+
+var spr1 = import Deltahead/Art1Sprites
+var pass = import Deltahead/Art2Passage
+var shaft = import Deltahead/Art2Shaft
+var spr = import Deltahead/Art2Sprites
+var s8 = import Deltahead/Art8Sprites
+var look = import Deltahead/Look
+// viewer options (flashes, shake). no comment on an import line or the game can't read the file
+var opt = import Deltahead/Options
+
+// timing, in frames
+var T_WALK = 20         // the Controller comes in
+var T_BACK = 140        // he steps back to the Bomb Cart
+var T_REACH = 160       // reaches up to its fuse
+var T_STRIKE = 170      // strikes a flint at it, three times
+var T_FUSE = 200        // it catches
+var T_KICK = 212        // he kicks the cart off
+var T_ROLL = 216        // it rolls
+var T_PICK = 222        // he crouches for his whip
+var T_CHASE = 300       // cut: following the Pusher
+var T_BOOM = 445        // it hits the end of the track
+var T_FALL = 870        // after the blast: cut down the crack (counted from T_BOOM)
+var T_END = 0           // set in Build
+
+// the Controller's frames in scene 1's ctrlR (facing right, mirrored from the game's, see tools/controller_frames.py)
+var C_REST = 0
+var C_LOOP = 2
+var C_STEP = 17
+var C_LASH = 21
+var C_RECOIL = 26
+var C_IDLE = 31
+var C_SLAM = 32
+var C_BARE = 43        // at rest, whip not drawn (the scene draws it)
+var C_HIT = 33
+var C_STAGGER = 34
+var C_KNEEL = 35
+var C_DOWN = 36
+var C_REACH = 37
+var C_STRIKE = 38
+var C_JERK = 40
+var C_KICK = 41
+var C_PICKUP = 42
+
+// places, in passage cells (the Controller's and the Pusher's by their heads)
+var C_STOP = 30         // where the Controller stops in the first shot
+var C_CART = 35         // where he stands at the Bomb Cart, by its fuse
+var P0 = 125            // where the Pusher is when we cut to him
+var C2 = 180            // where the Controller stops after the blast
+var HIT_X = 191         // where he steps in to and gets hit
+var DOWN_X = 181        // where he goes down, at the crack's far end
+var CHEST_STAND = 197   // where the Pusher kneels at the chest
+var DROP_X = 189        // where he steps into the crack
+var GRADE = "#e6cdb4"   // the passage's heat, same as scene 1
+var HORN_X = 177        // where his snapped-off horn comes down
+
+var f = 0
+var built = false
+var over = false
+var attached = false
+var parked = false
+var parkable = []       // canvases that get zero width while it waits (Park)
+var parkW = []
+var W = 0
+var H = 0
+var cx = 0
+var cy = 0
+var top = 0
+var camX = 0
+var camB = 0
+var shadeCol = ""
+var invis = ui.AddStyle("#########")
+var OFF = -1000
+
+var root = null
+var backdrop = []
+var shade = []
+var flashTiles = []
+var bars = []
+var pFar = null
+var pMid = null
+var pFront = null
+var crackOv = null
+var holeOv = null
+var lipOv = null
+var chest = null
+var bomb = null
+var fuse = null
+var smoke = []
+var wreck = null
+var wheel = null
+var ore = null
+var debris = []
+var ctrl = null
+var lid = null
+var horn = null
+var hornTrail = []
+var spark = null
+var lash = null
+var body = null
+var cart = null
+var manR = null
+var manL = null
+var heroR = null
+var heroL = null
+var blade = null
+var hilt = null
+var glints = []
+var drips = []
+var steam = null
+var shaftArt = null
+var faller = null
+var embers = []
+var blast = null
+var specks = []
+var fuseHalo = null
+var crackHalo = []
+var chestHalo = null
+var fallHalo = []
+var allLights = []
+var lightW = []          // each light's width (zero while it's off)
+var jobs = []
+var sparks = []
+var fires = []
+var fireHalo = []
+var fireSmoke = []
+var slash = null
+var vig = []
+
+// debris: where each piece starts, how it flies, where it lands
+var DEB_VX = [-1.3, -0.9, -0.5, -0.2, 0.3, 0.6, -1.6, 0.9]
+var DEB_VY = [-0.9, -1.3, -1.1, -1.5, -1.2, -0.8, -0.6, -1.0]
+var DEB_FLOOR = [26, 27, 25, 28, 26, 25, 27, 24]
+
+// his frames heaving at the wreck: lean, lean, strain, strain
+var PUSH_F = [8, 9, 13, 13]
+
+
+// ---------------------------------------------------------------- building
+
+func Place(c, x, y)
+  c.anchor = "top_left"
+  c.dock = "top_left"
+  c.x = x
+  c.y = y
+
+func MakeAnim(layers, x, y)
+  var a = ui.AddAnim(layers[0][1])
+  root.Add(a)
+  Place(a, x, y)
+  a.color = layers[0][0]
+  ?layers.Count() > 1
+    for i = 1 .. layers.Count() - 1
+      var l = a.AddLayer(layers[i][1])
+      l.color = layers[i][0]
+  return a
+
+func MakeCanvas(x, y, w, h, blend)
+  var c = ui.AddCanvas()
+  parkable.Add(c)
+  root.Add(c)
+  Place(c, x, y)
+  c.w = w
+  c.h = h
+  c.blend = blend
+  c.SetFG("#000000")
+  c.SetBG("#000000")
+  return c
+
+// canvases top out at 100 x 27 cells, so screen sized ones get tiled
+func Tiles(blend, y0, rows)
+  var list = []
+  for j = 0 .. (rows - 1) / 27
+    for i = 0 .. (W - 1) / 100
+      var c = MakeCanvas(i * 100, y0 + j * 27, IMin(100, W - i * 100), IMin(27, rows - j * 27), blend)
+      list.Add(c)
+  return list
+
+func Solid(list)
+  for c : list
+    c.Set(" ")
+
+func MakeText(s)
+  var t = ui.AddText(s)
+  root.Add(t)
+  t.anchor = "center_center"
+  t.dock = "center_center"
+  t.x = 0
+  t.y = 0
+  t.w = string.Size(s) + 2
+  t.h = 1
+  t.align = "center"
+  t.color = "#000000"
+  return t
+
+// a light: an additive canvas fading out from the center, filled a bit each frame
+func QueueHalo(w, h, r, g, b, bgk)
+  var c = MakeCanvas(OFF, 0, w, h, "add")
+  jobs.Add([c, w, h, r, g, b, bgk, 0])
+  allLights.Add(c)
+  lightW.Add(w)
+  c.w = 0
+  return c
+
+func RunJobs()
+  look.Run()
+  ?jobs.Count() = 0
+    return
+  var j = jobs[0]
+  var total = j[1] * j[2]
+  var last = IMin(total - 1, j[7] + 150)
+  var hx = (j[1] - 1) / 2.0
+  var hy = (j[2] - 1) / 2.0
+  for i = j[7] .. last
+    var x = i % j[1]
+    var y = i / j[1]
+    var dx = (x - hx) / (hx + 0.5)
+    var dy = (y - hy) / (hy + 0.5)
+    var k = 1.0 - math.Sqrt(dx * dx + dy * dy)
+    ?k > 0
+      k = k * k
+      j[0].SetFG(x, y, color.FromRGB(math.RoundToInt(j[3] * k), math.RoundToInt(j[4] * k), math.RoundToInt(j[5] * k)))
+      j[0].SetBG(x, y, color.FromRGB(math.RoundToInt(j[3] * k * j[6]), math.RoundToInt(j[4] * k * j[6]), math.RoundToInt(j[5] * k * j[6])))
+  j[7] = last + 1
+  ?j[7] >= total
+    jobs.RemoveAt(0)
+
+func Build()
+  built = true
+  W = screen.w
+  H = screen.h
+  cx = W / 2
+  cy = H / 2
+  // the floor row his wheels run on sits 7 rows below the middle of the screen
+  top = cy + 7 - pass.wheels
+  T_END = T_BOOM + T_FALL + 92
+  disable hud
+  disable player
+  disable banner
+  storage.Set("hidHud", true)
+
+  root = ui.AddPanel()
+  root.style = invis
+  root.anchor = "top_left"
+  root.dock = "top_left"
+  root.x = 0
+  root.y = 0
+  root.w = W
+  root.h = H
+  attached = true
+
+  // back to front: passage, blast leftovers, Bomb Cart, his cart and debris, Controller, him, drips,
+  // the crack's lip, near rock, the fall, then lights, shade, flash, bars
+  backdrop = Tiles("opaque", 0, H)
+  Solid(backdrop)
+  pFar = MakeAnim(pass.far, 0, 0)
+  pMid = MakeAnim(pass.mid, 0, 0)
+  crackOv = MakeAnim(pass.crack, 0, 0)
+  holeOv = MakeAnim(pass.hole, 0, 0)
+  chest = MakeAnim(spr.chest, 0, 0)
+  lid = MakeAnim(spr.lid, 0, 0)
+  for i = 0 .. 1
+    smoke.Add(MakeAnim(spr1.puff, 0, 0))
+  for i = 0 .. 1
+    fires.Add(MakeAnim(spr1.flame, 0, 0))
+  for i = 0 .. 1
+    fireSmoke.Add(MakeAnim(spr1.puff, 0, 0))
+  bomb = MakeAnim(spr.bombCart, 0, 0)
+  fuse = MakeAnim(spr.fuse, 0, 0)
+  for i = 0 .. 2
+    sparks.Add(MakeAnim(spr1.ember, 0, 0))
+  ore = MakeAnim(spr.ore, 0, 0)
+  wreck = MakeAnim(spr.cartWreck, 0, 0)
+  wheel = MakeAnim(spr.wheel, 0, 0)
+  // blast debris, under everyone's feet
+  for i = 0 .. 7
+    debris.Add(MakeAnim(spr.debris, 0, 0))
+  ctrl = MakeAnim(spr1.ctrlR, 0, 0)
+  horn = MakeAnim(spr.horn, 0, 0)
+  for i = 0 .. 1
+    var tr = MakeAnim(spr.debris, 0, 0)
+    tr.frame = 1
+    tr.color = "#bdb8ad"
+    hornTrail.Add(tr)
+  spark = MakeAnim(spr.spark, 0, 0)
+  lash = MakeAnim(spr.lash, 0, 0)
+  cart = MakeAnim(spr1.cart, 0, 0)
+  body = MakeAnim(spr1.body, 0, 0)
+  manR = MakeAnim(spr.manR, 0, 0)
+  manL = MakeAnim(spr.manL, 0, 0)
+  heroR = MakeAnim(spr.heroR, 0, 0)
+  heroL = MakeAnim(spr.heroL, 0, 0)
+  slash = MakeAnim(s8.slashL, 0, 0)
+  blade = MakeAnim(spr.sword, 0, 0)
+  hilt = MakeAnim(spr.sword, 0, 0)
+  for i = 0 .. 1
+    glints.Add(MakeAnim(spr.glint, 0, 0))
+  blast = MakeAnim(spr.blast, 0, 0)
+  for i = 0 .. 2
+    specks.Add(MakeAnim(spr1.speck, 0, 0))
+  for i = 0 .. 1
+    drips.Add(MakeAnim(spr1.drip14, 0, 0))
+  steam = MakeAnim(spr1.puff, 0, 0)
+  lipOv = MakeAnim(pass.lip, 0, 0)
+  pFront = MakeAnim(pass.front, 0, 0)
+  shaftArt = MakeAnim(shaft.shaft, 0, 0)
+  faller = MakeAnim(spr.heroR, 0, 0)
+  for i = 0 .. 3
+    embers.Add(MakeAnim(spr1.ember, 0, 0))
+
+  fuseHalo = QueueHalo(13, 5, 120, 80, 20, 0.12)
+  for i = 0 .. 1
+    crackHalo.Add(QueueHalo(31, 9, 170, 68, 20, 0.16))
+    crackHalo.Add(QueueHalo(27, 9, 120, 48, 14, 0.13))
+  chestHalo = QueueHalo(15, 7, 70, 70, 60, 0.1)
+  fallHalo.Add(QueueHalo(41, 15, 90, 36, 10, 0.12))
+  fallHalo.Add(QueueHalo(41, 15, 160, 64, 18, 0.16))
+  for i = 0 .. 1
+    fireHalo.Add(QueueHalo(27, 9, 165, 70, 16, 0.15))
+    fireHalo.Add(QueueHalo(23, 9, 120, 50, 12, 0.12))
+
+  shade = Tiles("multiply", 0, H)
+  vig = look.Vignette(root, W, H, 0.35)
+  for c : vig
+    parkable.Add(c)
+  // the blast's flash, over everything including the lights
+  flashTiles = Tiles("add", 0, H)
+  for c : flashTiles
+    c.x = c.x + OFF
+
+  var lb = IMax(2, H / 12)
+  for c : Tiles("opaque", 0, lb)
+    bars.Add(c)
+  for c : Tiles("opaque", H - lb, lb)
+    bars.Add(c)
+  Solid(bars)
+
+
+// ---------------------------------------------------------------- helpers
+
+func IMin(a, b)
+  ?a < b
+    return a
+  return b
+
+func IMax(a, b)
+  ?a > b
+    return a
+  return b
+
+func Prog(a, b)
+  return math.Clamp((f - a) * 1.0 / (b - a), 0.0, 1.0)
+
+func SetShade(col)
+  ?!string.Equals(col, shadeCol)
+    shadeCol = col
+    for c : shade
+      c.SetFG(col)
+      c.SetBG(col)
+
+func Show(c, on)
+  c.visible = on
+
+func ShowAll(list, on)
+  for c : list
+    c.visible = on
+
+// a light on its source, or off screen with zero width (the game draws every canvas wherever it is)
+func Light(c, on, x, y)
+  ?on
+    var w = lightW[allLights.IndexOf(c)]
+    c.w = w
+    c.x = x - w / 2
+    c.y = y - c.h / 2
+  :
+    c.x = OFF
+    c.w = 0
+
+// passage cell -> screen
+func SX(x)
+  return x - camX
+
+func SY(y)
+  return y + top
+
+// the flash: k from 0 (none) to 1 (white)
+func Flash(k)
+  ?!opt.flashes
+    k = 0
+  var i = 0
+  for c : flashTiles
+    ?k > 0
+      c.x = (i % ((W - 1) / 100 + 1)) * 100
+      var v = math.RoundToInt(255 * k)
+      c.SetFG(color.FromRGB(v, v, v))
+      c.SetBG(color.FromRGB(v, v, v))
+    :
+      c.x = OFF
+    i++
+
+// where the Bomb Cart is: still, then picking up speed, then rolling on
+func BombX()
+  return BombXAt(f)
+
+func BombXAt(at)
+  ?at < T_ROLL
+    return pass.bombStart
+  var t = at - T_ROLL
+  ?t < 40
+    return pass.bombStart + 0.75 * t * t / 80.0
+  return pass.bombStart + 15 + 0.75 * (t - 40)
+
+// where the Pusher is while we follow him
+func PusherX()
+  return P0 + 0.3 * (f - T_CHASE)
+
+// the Controller, by his head's cell, with his feet on row r
+func CtrlAt(hx, r, frame)
+  Show(ctrl, true)
+  ctrl.x = SX(hx) - spr1.ctrlHeadR
+  ctrl.y = SY(r) - 4
+  ctrl.frame = frame
+
+// him without his cart or with his sword, by his head's cell; feet on row r
+func ManAt(hx, r, frame, left)
+  var b = manR
+  ?left
+    b = manL
+  Show(b, true)
+  b.x = SX(hx) - 1
+  ?left
+    b.x = SX(hx) - 2
+  b.y = SY(r) - 3
+  b.frame = frame
+
+func HeroAt(hx, r, frame, left)
+  var b = heroR
+  ?left
+    b = heroL
+  Show(b, true)
+  b.x = SX(hx) - 1
+  ?left
+    b.x = SX(hx) - 4
+  b.y = SY(r) - 3
+  b.frame = frame
+
+
+// ---------------------------------------------------------------- shots
+
+// the Controller walks in, lights the Bomb Cart's fuse with a flint, kicks it off and grabs his whip
+func Sending()
+  camX = 0
+  SetShade(GRADE)
+  var hx = C_STOP
+  var row = pass.wheels
+  var frame = C_STEP + 3
+  ?f < T_BACK
+    // walking in, whip trailing
+    hx = -6 + math.RoundToInt((f - T_WALK) * (C_STOP + 6) / 120.0)
+    frame = C_STEP + (f / 6) % 4
+  :?f < T_BACK + 12
+    // stepping back between the rails to the cart
+    hx = C_STOP + (f - T_BACK) * (C_CART - C_STOP) / 12
+    row = pass.wheels - (f - T_BACK) * 3 / 12
+    frame = C_STEP + (f / 4) % 4
+  :
+    hx = C_CART
+    row = pass.wheels - 3
+    ?f >= T_REACH & f < T_STRIKE
+      frame = C_REACH
+    :?f >= T_STRIKE & f < T_FUSE
+      frame = C_STRIKE + ((f - T_STRIKE) / 5) % 2
+    :?f >= T_FUSE & f < T_KICK
+      frame = C_JERK
+    :?f >= T_KICK & f < T_PICK
+      frame = C_KICK
+    :?f >= T_PICK & f < T_PICK + 16
+      frame = C_PICKUP
+  CtrlAt(hx, row, frame)
+  ?f = T_STRIKE | f = T_STRIKE + 10 | f = T_STRIKE + 20
+    play stone_throw_hit @160 + (f - T_STRIKE) * 3 / 2@
+  :?f = T_ROLL
+    play bomb_cart_move 90
+  Rolling()
+
+
+// the Bomb Cart, its lit fuse and glow, and its smoke
+func Rolling()
+  var bxf = BombX() - camX
+  ?f >= T_CHASE & f < T_BOOM
+    // placed off him, not the rounded camera, so it doesn't jitter back a cell when the camera steps
+    bxf = BombX() - PusherX() - 7 + cx
+  var sx = math.RoundToInt(bxf)
+  Show(bomb, true)
+  bomb.x = sx
+  bomb.y = SY(pass.trackRow - 5)
+  bomb.frame = 0
+  ?f >= T_ROLL
+    bomb.frame = (f / 3) % 2
+  ?f >= T_FUSE
+    Show(fuse, true)
+    fuse.frame = (f / 2) % 4
+    fuse.x = sx + 2
+    fuse.y = SY(pass.trackRow - 6)
+    Light(fuseHalo, jobs.Count() = 0, sx + 3, SY(pass.trackRow - 6))
+    for i = 0 .. 2
+      var sp = sparks[i]
+      var life = 9 + i * 3
+      var age = (f + i * 5) % life
+      Show(sp, f < T_BOOM)
+      sp.frame = (f / 2 + i) % 4
+      // rounded once so it can't step back against the cart
+      sp.x = math.RoundToInt(bxf + 3 + (i - 1) * age * 0.35)
+      sp.y = SY(pass.trackRow - 7) - math.RoundToInt(age * 0.45)
+      sp.color = "#ffd27a"
+      ?age > life - 4
+        sp.color = "#e0461c"
+    for i = 0 .. 1
+      var p = (f + i * 20) % 40
+      var s = smoke[i]
+      Show(s, p < 20 & f - p >= T_FUSE)
+      s.frame = p / 4
+      // each puff stays where the cart left it and drifts back
+      var px = BombXAt(f - p) + 1 - p * 0.05
+      s.x = SX(math.RoundToInt(px))
+      ?f >= T_CHASE & f < T_BOOM
+        s.x = math.RoundToInt(px - PusherX()) - 7 + cx
+      s.y = SY(pass.trackRow - 12)
+
+
+// following the Pusher while the Bomb Cart comes up behind, passes him and races to the end
+func Chase()
+  var bx = PusherX()
+  camX = math.RoundToInt(bx) + 7 - cx
+  SetShade(GRADE)
+  Show(cart, true)
+  Show(body, true)
+  cart.x = cx - 4
+  cart.y = SY(pass.wheels) - 2
+  body.x = cx - 7
+  body.y = SY(pass.wheels) - 2
+  body.frame = (f / 5) % 4
+  Rolling()
+  ?f = T_CHASE + 20
+    play bomb_cart_move 80
+
+
+// the blast and after: his cart wrecked, the chest and the sword, the fight, then into the crack
+func After()
+  var b = f - T_BOOM
+  camX = camB
+  var lit = jobs.Count() = 0
+
+  // the flash and the shake
+  Flash(IMax(0, 14 - b) / 14.0)
+  ?b < 14 & opt.shake
+    var amp = 1
+    ?b < 6
+      amp = 2
+    root.x = ((b % 2) * 2 - 1) * amp
+    root.y = (((b + 1) % 2) * 2 - 1) * amp / 2
+  ?b = 0
+    play bomb_cart_explosion
+  :?b = 4
+    play mushroom_boss_fat_slam 70
+  :?b = 12
+    play stone_throw_hit 55
+  :?b = 20
+    play stone_throw_hit 70
+
+  // the blast itself, then smoke
+  Show(blast, b < 40)
+  blast.x = SX(pass.deadX - 9)
+  blast.y = SY(pass.trackRow - 7)
+  blast.frame = IMin(5, b / 7)
+  ?b < 2
+    blast.frame = 0
+
+  // what it opened: the rock, the floor, the heat coming up
+  Show(holeOv, true)
+  holeOv.x = SX(pass.holeX)
+  holeOv.y = SY(pass.holeY)
+  Show(crackOv, true)
+  crackOv.x = SX(pass.crackX)
+  crackOv.y = SY(pass.crackY)
+  Show(lipOv, true)
+  lipOv.x = SX(pass.crackX)
+  lipOv.y = SY(pass.crackY)
+  var dim = (f / 4) % 3 = 0
+  Light(crackHalo[0], lit & !dim, SX(pass.crackX + 7), SY(pass.crackY + 1))
+  Light(crackHalo[1], lit & dim, SX(pass.crackX + 7), SY(pass.crackY + 1))
+
+  // debris flying out and landing
+  for i = 0 .. 7
+    var d = debris[i]
+    Show(d, true)
+    d.frame = i % 5
+    var t = b
+    var y = 20 + DEB_VY[i] * t + 0.06 * t * t
+    var x = pass.deadX + DEB_VX[i] * t
+    ?y >= DEB_FLOOR[i] & t > 4
+      // landed, stays where it came down
+      var tl = (-DEB_VY[i] + math.Sqrt(DEB_VY[i] * DEB_VY[i] + 0.24 * (DEB_FLOOR[i] - 20))) / 0.12
+      x = pass.deadX + DEB_VX[i] * tl
+      y = DEB_FLOOR[i]
+    d.x = SX(math.RoundToInt(x))
+    d.y = SY(math.RoundToInt(y))
+
+  // grit sifting down from the ceiling for a while
+  for i = 0 .. 2
+    var g0 = 20 + i * 17
+    Show(specks[i], b >= g0 & b < g0 + 16)
+    specks[i].frame = IMin(15, IMax(0, b - g0))
+    specks[i].x = SX(pass.deadX - 14 + i * 9)
+    specks[i].y = SY(10)
+
+  for i = 0 .. 1
+    var fl = fires[i]
+    var burning = b >= 10 + i * 6 & b < 620 + i * 90
+    Show(fl, burning)
+    fl.frame = (f / 3 + i * 2) % 4
+    fl.x = SX(pass.deadX - 6 + i * 9) - 1
+    fl.y = SY(pass.trackRow + 1 - i) - 1
+    var fd = (f / 4 + i) % 3 = 0
+    Light(fireHalo[i * 2], lit & burning & !fd, fl.x + 1, fl.y + 1)
+    Light(fireHalo[i * 2 + 1], lit & burning & fd, fl.x + 1, fl.y + 1)
+    var sm = fireSmoke[i]
+    var sa = (f + i * 23) % 48
+    Show(sm, burning & sa < 32)
+    sm.frame = IMin(4, sa / 7)
+    sm.x = fl.x - sa / 8
+    sm.y = fl.y - 3 - sa / 6
+  Wreck(b)
+  Chest(b, lit)
+  Fight(b)
+  Him(b)
+
+
+// his cart tips over, a wheel rolls into the crack, ore spills. later it rocks when he heaves at it
+func Wreck(b)
+  var wx = camB + cx - 4
+  Show(wreck, true)
+  wreck.frame = 2
+  var jolt = 0
+  ?b >= 100 & b < 176 & (b / 6) % 4 = 2
+    jolt = 1
+  wreck.x = SX(wx - IMin(2, b / 3) + jolt)
+  ?b < 6
+    wreck.frame = IMin(1, b / 3)
+  wreck.y = SY(pass.wheels) - 2
+  Show(ore, b >= 6)
+  ore.x = SX(wx - 4)
+  ore.y = SY(pass.wheels + 1)
+  // the wheel rolls off to the crack and drops in
+  var rx = wx + 5 + math.RoundToInt(IMax(0, b - 4) * 0.5)
+  var ry = pass.wheels
+  ?rx >= pass.crackX + 4
+    rx = pass.crackX + 4
+    ry = pass.wheels + 1 + (b - 4 - (pass.crackX + 4 - wx - 5) * 2) / 2
+  Show(wheel, b >= 4 & ry < pass.wheels + 6)
+  wheel.frame = (b / 3) % 2
+  wheel.x = SX(rx)
+  wheel.y = SY(ry)
+
+
+// the chest falls out of the rock, the lid flies off, glints inside and then on the sword
+func Chest(b, lit)
+  Show(chest, true)
+  chest.x = SX(pass.chestX)
+  chest.frame = 0
+  var cy0 = pass.chestY
+  ?b >= 210
+    // drops out onto the floor
+    cy0 = IMin(pass.chestFloorY, pass.chestY + (b - 210) / 2)
+    ?b >= 222 & b < 226
+      cy0 = pass.chestFloorY - 1
+  chest.y = SY(cy0)
+  ?b = 216
+    play treasure_drop_humble
+  // his pulls strain the lid, it gives the second time
+  ?(b >= 347 & b < 363) | (b >= 371 & b < 377)
+    chest.frame = 3
+  ?b >= 377
+    chest.frame = 2
+  ?b = 377
+    play treasure_open
+  ?b >= 377
+    Show(lid, true)
+    var t = IMin(14, b - 377)
+    lid.frame = (t / 3) % 4
+    var ly = pass.chestFloorY - 0.9 * t + 0.07 * t * t
+    ?t >= 14
+      ly = pass.chestFloorY + 1
+      lid.frame = 0
+    lid.x = SX(pass.chestX + 2 + t / 3)
+    lid.y = SY(math.RoundToInt(ly))
+  Light(chestHalo, lit & b >= 377 & b < 475, SX(pass.chestX + 2), SY(pass.chestFloorY))
+  var looking = b >= 405 & b < 437
+  var lifting = b >= 437 & b < 475
+  ShowAll(glints, looking | lifting)
+  ?looking
+    for i = 0 .. 1
+      glints[i].frame = (b / 4 + i) % 3
+      glints[i].x = SX(pass.chestX + 1 + i * 2)
+      glints[i].y = SY(pass.chestFloorY)
+  :?lifting
+    for i = 0 .. 1
+      glints[i].frame = (b / 3 + i) % 3
+      glints[i].x = SX(CHEST_STAND - 1 + i * 2)
+      glints[i].y = SY(pass.wheels - 4 + i)
+  ?b = 437
+    play treasure_item_show
+  :?b = 445
+    play treasure_item_pop
+
+
+// the Controller walks in, lashes at the Pusher's feet, comes at him, gets hit and goes down
+func Fight(b)
+  ?b < 505
+    return
+  var hx = C2
+  var frame = C_STEP + 3
+  var start = camB - 16
+  ?b < 609
+    hx = start + math.RoundToInt((b - 505) * (C2 - start) / 104.0)
+    frame = C_STEP + (b / 6) % 4
+  :?b < 621
+    frame = C_STEP + 3
+  :?b < 633
+    frame = C_LASH + (b - 621) / 4
+  :?b < 633 + spr.lashN
+    // the whip is drawn on its own (simulated), out of his hand
+    frame = C_BARE
+  :?b < 673
+    frame = C_IDLE
+  :?b < 689
+    hx = C2 + (b - 673) * (HIT_X - C2) / 16
+    frame = C_LOOP + (b / 5) % 2
+  :?b < 692
+    hx = HIT_X
+    frame = C_LOOP + 1
+  :?b < 700
+    hx = HIT_X
+    frame = C_HIT
+  :?b < 716
+    hx = HIT_X - (b - 700) * (HIT_X - DOWN_X) / 16
+    frame = C_STAGGER
+  :?b < 724
+    hx = DOWN_X
+    frame = C_KNEEL
+  :
+    hx = DOWN_X
+    frame = C_DOWN
+  CtrlAt(hx, pass.wheels, frame)
+  // the lash, cracking at the Pusher's feet and reeled back in
+  var k = b - 633
+  Show(lash, k >= 0 & k < spr.lashN)
+  lash.frame = IMin(spr.lashN - 1, IMax(0, k))
+  lash.x = SX(C2 + 2) - spr.lashOX
+  lash.y = SY(pass.wheels - 1) - spr.lashOY
+  // his front horn snaps off: a spark, then it spins away over his shoulder, bounces and stays
+  Show(slash, b >= 687 & b < 697)
+  slash.frame = IMin(2, IMax(0, b - 687) / 3)
+  slash.x = SX(CHEST_STAND - 5)
+  slash.y = SY(pass.wheels - 3)
+  ?b >= 692 & b < 695
+    Flash(0.18)
+  Show(spark, b >= 692 & b < 698)
+  spark.frame = IMin(1, IMax(0, b - 692) / 3)
+  spark.x = SX(HIT_X + 2) - 1
+  spark.y = SY(pass.wheels - 2) - 1
+  ?b >= 692
+    var t = b - 692
+    Show(horn, true)
+    horn.frame = (t / 3) % 4
+    ?t >= 30
+      horn.frame = 3
+    horn.x = SX(math.RoundToInt(HornX(t)))
+    horn.y = SY(math.RoundToInt(HornY(t)))
+    for i = 0 .. 1
+      var tt = t - 2 - i * 2
+      var tr = hornTrail[i]
+      Show(tr, tt >= 0 & t < 30)
+      tr.x = SX(math.RoundToInt(HornX(tt)))
+      tr.y = SY(math.RoundToInt(HornY(tt)))
+  ?b = 621
+    play controller_whip_attack
+  :?b = 633 + spr.lashCrack
+    play controller_whip_hit
+  :?b = 685
+    play sword_cast
+  :?b = 692
+    play sword_hit
+  :?b = 722
+    // the horn landing
+    play stone_throw_hit 150
+
+
+// the horn t frames after the blow: over his shoulder to the floor, then a bounce
+func HornX(t)
+  ?t < 30
+    return HIT_X + 1 + (HORN_X - HIT_X - 1) * t / 30.0
+  return HORN_X + 2 * IMin(8, t - 30) / 8.0
+
+func HornY(t)
+  ?t < 30
+    var p = t / 30.0
+    return pass.wheels - 2 + 3 * p - 7 * math.Sin(p * 3.14159)
+  return pass.wheels + 1 - math.Sin(IMin(8, t - 30) / 8.0 * 3.14159)
+
+
+// him, from the blast to the drop
+func Him(b)
+  // where the chase left him: his head's cell
+  var hx = camB + cx - 5
+  var ch = CHEST_STAND - 1
+  ?b < 12
+    // thrown back by the blast
+    ManAt(hx - b / 4, pass.wheels - IMin(1, (12 - b) / 6), 5, false)
+  :?b < 40
+    // flat on his back
+    ManAt(hx - 3, pass.wheels, 19, false)
+  :?b < 56
+    ManAt(hx - 3, pass.wheels, 6, false)
+  :?b < 66
+    ManAt(hx - 3, pass.wheels, 7, false)
+  :?b < 90
+    ManAt(hx - 3, pass.wheels, 4, false)
+  :?b < 100
+    ManAt(hx - 2, pass.wheels, (b / 5) % 4, false)
+  :?b < 176
+    // heaving at his cart, it rocks but stays put
+    ManAt(hx - 2, pass.wheels, PUSH_F[(b / 6) % 4], false)
+  :?b < 236
+    ManAt(hx - 2, pass.wheels, 4, false)
+  :?b < 329
+    // to the chest
+    var wx = hx - 2 + math.RoundToInt((b - 236) * (CHEST_STAND - hx + 2) / 93.0)
+    ManAt(wx, pass.wheels, (b / 6) % 4, false)
+  :?b < 339
+    // prying it open: kneel, grip, pull, pull hard, slip, again and it gives
+    ManAt(CHEST_STAND, pass.wheels, 14, false)
+  :?b < 347
+    ManAt(CHEST_STAND, pass.wheels, 15, false)
+  :?b < 355
+    ManAt(CHEST_STAND, pass.wheels, 16, false)
+  :?b < 363
+    ManAt(CHEST_STAND - 1, pass.wheels, 17, false)
+  :?b < 371
+    ManAt(CHEST_STAND, pass.wheels, 15, false)
+  :?b < 377
+    ManAt(CHEST_STAND - 1, pass.wheels, 17, false)
+  :?b < 395
+    // and lands on his rear
+    ManAt(CHEST_STAND - 2, pass.wheels, 6, false)
+  :?b < 403
+    ManAt(CHEST_STAND - 2, pass.wheels, 7, false)
+  :?b < 411
+    ManAt(ch, pass.wheels, 4, false)
+  :?b < 429
+    // looking in
+    ManAt(ch, pass.wheels, 18, false)
+  :?b < 437
+    ManAt(ch, pass.wheels, 10, false)
+  :?b < 475
+    // the sword, lifted high
+    HeroAt(ch, pass.wheels, 6, false)
+  :?b < 630 + spr.lashCrack
+    HeroAt(ch, pass.wheels, 4, false)
+  :?b < 644 + spr.lashCrack
+    // the lash comes from behind, he hops it without looking
+    HeroAt(ch, pass.wheels - 2, 5, false)
+  :?b < 675
+    HeroAt(ch, pass.wheels, 4, false)
+  :?b < 681
+    // turns for the first time: raise, swing, strike, recover
+    HeroAt(ch, pass.wheels, 4, true)
+  :?b < 687
+    HeroAt(ch, pass.wheels, 6, true)
+  :?b < 691
+    HeroAt(ch, pass.wheels, 10, true)
+  :?b < 699
+    HeroAt(ch, pass.wheels, 7, true)
+  :?b < 711
+    HeroAt(ch, pass.wheels, 8, true)
+  :?b < 785
+    HeroAt(ch, pass.wheels, 4, true)
+  :?b < 805
+    // past him, to the crack
+    var dx = ch - math.RoundToInt((b - 785) * (ch - DROP_X) / 20.0)
+    HeroAt(dx, pass.wheels, (b / 5) % 4, true)
+  :?b < 835
+    // at the edge, crouched, looking down into it
+    HeroAt(DROP_X, pass.wheels, 11, true)
+  :
+    // and in: up off his feet, then down
+    var dy = pass.wheels - 1 + (b - 835) * (b - 835) / 6
+    HeroAt(DROP_X, IMin(pass.wheels + 30, dy), 5, true)
+
+
+// down the crack: the camera falls with him, embers rushing up, then the dark
+func Falling()
+  var t = f - T_BOOM - T_FALL
+  camX = camB
+  root.x = 0
+  root.y = 0
+  Flash(0)
+  // the camera falls with him, then slows and stops as he drops away, scene 3 picks it up from there
+  var fall = 0.5 * t + 0.008 * t * t
+  var cam = fall
+  var s = t - 50
+  ?s > 0
+    var v = 1.3
+    var k = 0.04
+    var sk = math.Min(s * 1.0, v / k)
+    cam = 0.5 * 50 + 0.008 * 50 * 50 + v * sk - 0.5 * k * sk * sk
+  var depth = math.RoundToInt(cam)
+  var below = math.RoundToInt(fall - cam)
+  Show(shaftArt, true)
+  shaftArt.x = cx - shaft.w / 2
+  shaftArt.y = -depth
+  Show(faller, below < H - cy + 4)
+  faller.frame = 5
+  faller.x = cx - 2 + (t / 8) % 2
+  faller.y = cy - 3 + below
+  for i = 0 .. 3
+    var e = embers[i]
+    Show(e, true)
+    e.frame = (t / 2 + i) % 4
+    e.x = cx - 6 + i * 4 + math.RoundToInt(math.Sin(t * 0.2 + i) * 2)
+    e.y = H - ((t * 2 + i * 11) % H)
+  var lit = jobs.Count() = 0
+  var hot = depth > 40 & below < 8
+  Light(fallHalo[0], lit & !hot & below < H, cx, cy - 2 + below)
+  Light(fallHalo[1], lit & hot, cx, cy - 2 + below)
+  // the walls go dark behind him
+  SetShade(color.Lerp(GRADE, "#5a4c44", Prog(T_BOOM + T_FALL + 60, T_END)))
+  ?t = 2
+    play fire_geyser 70
+
+
+// life in the passage: drips off the stalactites, steam off the vent
+func Life()
+  for i = 0 .. 1
+    var d = drips[i]
+    var ph = (f + i * 37) % 70
+    Show(d, ph < 17)
+    d.frame = IMin(16, ph)
+    d.x = SX(pass.dripX[i]) - 1
+    d.y = SY(pass.dripTop)
+  var sp = f % 70
+  Show(steam, sp < 20)
+  steam.frame = sp / 4
+  steam.x = SX(pass.ventX[0]) - 2
+  steam.y = SY(pass.ventY[0]) - 6
+
+
+func Frame()
+  for c : allLights
+    c.x = OFF
+    c.w = 0
+  var passage = f < T_BOOM + T_FALL
+  Show(pFar, passage)
+  Show(pMid, passage)
+  Show(pFront, passage)
+  Show(crackOv, false)
+  Show(holeOv, false)
+  Show(lipOv, false)
+  Show(chest, false)
+  ShowAll(smoke, false)
+  Show(bomb, false)
+  Show(fuse, false)
+  Show(ore, false)
+  Show(wreck, false)
+  Show(wheel, false)
+  ShowAll(debris, false)
+  Show(blast, false)
+  ShowAll(specks, false)
+  Show(ctrl, false)
+  Show(lid, false)
+  Show(horn, false)
+  ShowAll(hornTrail, false)
+  Show(spark, false)
+  Show(lash, false)
+  Show(slash, false)
+  ShowAll(sparks, false)
+  ShowAll(fires, false)
+  ShowAll(fireSmoke, false)
+  Show(cart, false)
+  Show(body, false)
+  Show(manR, false)
+  Show(manL, false)
+  Show(heroR, false)
+  Show(heroL, false)
+  Show(blade, false)
+  Show(hilt, false)
+  ShowAll(glints, false)
+  ShowAll(drips, false)
+  Show(steam, false)
+  Show(shaftArt, false)
+  Show(faller, false)
+  ShowAll(embers, false)
+  root.x = 0
+  root.y = 0
+  Flash(0)
+  pFar.y = top
+  pMid.y = top
+  pFront.y = top
+
+  ?f < T_CHASE
+    Sending()
+  :?f < T_BOOM
+    Chase()
+    ?f = T_BOOM - 1
+      camB = camX
+  :?f < T_BOOM + T_FALL
+    After()
+  :
+    Falling()
+  ?passage
+    // the layers follow the camera the shot just set
+    pFar.x = -math.RoundToInt(camX * 0.55)
+    pMid.x = -camX
+    pFront.x = -math.RoundToInt(camX * 1.45)
+    Life()
+  Sfx()
+
+
+// ---------------------------------------------------------------- sounds
+
+// the rest of the sounds (the blast, chest and fight play their own), plus drips and the vent
+func Sfx()
+  ?f = 0
+    ambient.Stop()
+    ambient.Add("ambient_cave")
+  ?f >= T_FUSE & f + 30 <= T_BOOM & (f - T_FUSE) % 30 = 0
+    // the fuse on repeat, each one a second long so the last ends as it blows
+    play bomb_cart_fuse
+  ?f = T_KICK
+    play player_kick 85
+  :?f = T_PICK + 6
+    play controller_whip_back 95
+  :?f = T_CHASE + 60
+    play bomb_cart_move 110
+  var b = f - T_BOOM
+  ?b = 10
+    play player_hit 85
+  :?b = 122
+    // his cart won't move
+    play poena_wood_crack 125
+  :?b = 152
+    play bomb_cart_move 60
+  :?b = 347
+    play bronze_gate_locked 90
+  :?b = 363
+    // his grip slips
+    play waterfall_rope_grab 80
+  :?b = 381
+    play cross_deadwood_bump 70
+  :?b = 475
+    // the sword down at his side
+    play equip 95
+  :?b = 808
+    // the heat coming up out of the crack
+    play fire_orbs 70
+  :?b = 836
+    play quest_stone_jump 90
+  :?b = T_FALL + 12
+    // air rushing past on the way down
+    play air_hiss 110
+  ?b < T_FALL
+    // a drip now and then, and the vent
+    ?f % 280 = 16
+      play pickup_tar @140 + (f / 280) % 3 * 12@
+    :?f % 420 = 350
+      play air_hiss @165 + (f / 420) % 2 * 15@
+
+
+// ---------------------------------------------------------------- the film calls these
+
+// a scene built ahead waits off screen and the game still draws its canvases, so zero their width till it's on
+func Park()
+  parkW = []
+  for c : parkable
+    parkW.Add(c.w)
+    c.w = 0
+
+func Unpark()
+  for i = 0 .. parkable.Count() - 1
+    var c = parkable[i]
+    c.w = parkW[i]
+
+// built during the scene before so the lights are ready, parked off to the side (ui.Remove would throw it away)
+func Warm()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+    root.x = OFF
+    parked = true
+    Park()
+    // building is heavy enough for one frame
+    return
+  RunJobs()
+
+func Update()
+  ?!built
+    ?totaltime < 1
+      return
+    Build()
+  ?parked
+    root.x = 0
+    parked = false
+    Unpark()
+  ?!attached
+    ui.root.Add(root)
+    attached = true
+  RunJobs()
+  Frame()
+  ?f <= T_END
+    f++
+  :
+    over = true
+
+// take its picture off the screen (another scene is playing)
+func Detach()
+  ?attached
+    ui.root.Remove(root)
+    attached = false
+
+// back to the start, for watching again
+func Reset()
+  f = 0
+  over = false
+  camB = 0

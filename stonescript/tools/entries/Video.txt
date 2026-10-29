@@ -1,0 +1,195 @@
+// for the YouTube video only (not in the package): 3 s of black, then the whole film the way Main
+// plays it, with the video's own ending. render_4k.py runs it instead of Main. the scene chain is
+// copied from Main by make_video_entry.py, so run that again if Main changes
+
+var opt = import Deltahead/Options
+var black = 0
+var film1 = new Deltahead/Scene1
+var film2 = null
+var film3 = null
+var film4 = null
+var film5 = null
+var film6 = null
+var film7 = null
+var film8 = null
+var film9 = null
+var film10 = null
+var film11 = null
+var film12 = null
+var film13 = null
+var film14 = null
+var film15 = null
+var film16 = null
+var film17 = null
+var part = 0
+
+opt.video = true
+opt.filmOn = true
+?string.Equals(loc.id, "waterfall")
+  ?part = 0
+    black++
+    ?black >= 90
+      part = 1
+      film1.Update()
+  :?part = 1
+    film1.Update()
+    ?film1.f >= film1.T_END - 90
+      ?film2 = null
+        film2 = new Deltahead/Scene2
+      film2.Warm()
+    ?film1.over
+      film1.Detach()
+      part = 2
+      film2.Update()
+  :?part = 2
+    film2.Update()
+    ?film2.f >= film2.T_END - 90
+      ?film3 = null
+        film3 = new Deltahead/Scene3
+      film3.Warm()
+    ?film2.over
+      film2.Detach()
+      part = 3
+      film3.Update()
+  :?part = 3
+    film3.Update()
+    ?film3.f >= film3.T_END - 90
+      ?film4 = null
+        film4 = new Deltahead/Scene4
+      film4.Warm()
+    ?film3.over
+      film3.Detach()
+      part = 4
+      film4.Update()
+  :?part = 4
+    film4.Update()
+    ?film4.f >= film4.T_END - 90
+      ?film5 = null
+        film5 = new Deltahead/Scene5
+      film5.Warm()
+    ?film4.over
+      film4.Detach()
+      part = 5
+      film5.Update()
+  :?part = 5
+    film5.Update()
+    ?film5.f >= film5.T_END - 90
+      ?film6 = null
+        film6 = new Deltahead/Scene6
+      film6.Warm()
+    ?film5.over
+      film5.Detach()
+      part = 6
+      film6.Update()
+  :?part = 6
+    film6.Update()
+    ?film6.f >= film6.T_END - 90
+      ?film7 = null
+        film7 = new Deltahead/Scene7
+      film7.Warm()
+    ?film6.over
+      film6.Detach()
+      part = 7
+      film7.Update()
+  :?part = 7
+    film7.Update()
+    ?film7.f >= film7.T_END - 90
+      ?film8 = null
+        film8 = new Deltahead/Scene8
+      film8.Warm()
+    ?film7.over
+      film7.Detach()
+      part = 8
+      film8.Update()
+  :?part = 8
+    film8.Update()
+    ?film8.f >= film8.T_END - 90
+      ?film9 = null
+        film9 = new Deltahead/Scene9
+      film9.Warm()
+    ?film8.over
+      film8.Detach()
+      part = 9
+      film9.Update()
+  :?part = 9
+    film9.Update()
+    ?film9.f >= film9.T_END - 90
+      ?film10 = null
+        film10 = new Deltahead/Scene10
+      film10.Warm()
+    ?film9.over
+      film9.Detach()
+      part = 10
+      film10.Update()
+  :?part = 10
+    film10.Update()
+    ?film10.f >= film10.T_END - 90
+      ?film11 = null
+        film11 = new Deltahead/Scene11
+      film11.Warm()
+    ?film10.over
+      film10.Detach()
+      part = 11
+      film11.Update()
+  :?part = 11
+    film11.Update()
+    ?film11.f >= film11.T_END - 90
+      ?film12 = null
+        film12 = new Deltahead/Scene12
+      film12.Warm()
+    ?film11.over
+      film11.Detach()
+      part = 12
+      film12.Update()
+  :?part = 12
+    film12.Update()
+    ?film12.f >= film12.T_END - 90
+      ?film13 = null
+        film13 = new Deltahead/Scene13
+      film13.Warm()
+    ?film12.over
+      film12.Detach()
+      part = 13
+      film13.Update()
+  :?part = 13
+    film13.Update()
+    ?film13.f >= film13.T_END - 90
+      ?film14 = null
+        film14 = new Deltahead/Scene14
+      film14.Warm()
+    ?film13.over
+      film13.Detach()
+      part = 14
+      film14.Update()
+  :?part = 14
+    film14.Update()
+    ?film14.f >= 900
+      ?film15 = null
+        film15 = new Deltahead/Scene15
+      film15.Warm()
+    ?film14.over
+      film14.Detach()
+      part = 15
+      film15.Update()
+  :?part = 15
+    film15.Update()
+    ?film15.f >= film15.T_END - 90
+      ?film16 = null
+        film16 = new Deltahead/Scene16
+      film16.Warm()
+    ?film15.over
+      film15.Detach()
+      part = 16
+      film16.Update()
+  :?part = 16
+    film16.Update()
+    ?film16.f >= film16.T_END - 150
+      ?film17 = null
+        film17 = new Deltahead/Scene17
+      film17.Warm()
+    ?film16.over
+      film16.Detach()
+      part = 17
+      film17.Update()
+  :
+    film17.Update()
