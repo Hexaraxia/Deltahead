@@ -13,6 +13,7 @@ FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "font")
 GW, GH = 45, 82                # a glyph's size in the table
 COLS, ROWS = 85, 26            # the game's grid on a 3840 x 2160 screen
 SCREEN_W, SCREEN_H = 3840, 2160
+CW, CH = GW, GH                # a cell's size on screen (smaller with use_grid)
 
 _masks = None
 _charmap = None
@@ -27,7 +28,20 @@ def _load():
                            dtype=np.uint16)
         # glyphs are black on white, so flip them to get the mask
         _masks = (255 - atlas).reshape(16, GH, 16, GW).transpose(0, 2, 1, 3).reshape(256, GH, GW)
+        if (CW, CH) != (GW, GH):
+            _masks = np.stack([np.asarray(Image.fromarray(m.astype(np.uint8)).resize((CW, CH), Image.LANCZOS),
+                                          dtype=np.uint16) for m in _masks])
         _charmap = json.load(open(os.path.join(FONT_DIR, "charmap.json"), encoding="utf-8"))
+
+
+def use_grid(cols, rows):
+    """Draw a cols x rows grid instead of the game's own, its glyphs scaled down to fit the same screen."""
+    global COLS, ROWS, CW, CH, _masks
+    COLS, ROWS = cols, rows
+    CH = min(SCREEN_H // rows, SCREEN_W * GH // (cols * GW))
+    CW = min(round(CH * GW / GH), SCREEN_W // cols)
+    _masks = None
+    _tiles.clear()
 
 
 def glyph_index(ch):
@@ -64,13 +78,13 @@ def draw(grid):
     _load()
     rows, cols = len(grid), len(grid[0])
     out = np.zeros((SCREEN_H, SCREEN_W, 3), dtype=np.uint8)
-    x0 = (SCREEN_W - cols * GW) // 2
-    y0 = (SCREEN_H - rows * GH) // 2
+    x0 = (SCREEN_W - cols * CW) // 2
+    y0 = (SCREEN_H - rows * CH) // 2
     for y, row in enumerate(grid):
-        py = y0 + y * GH
+        py = y0 + y * CH
         for x, (ch, fg, bg) in enumerate(row):
             if ch in " #" and bg == (0, 0, 0):
                 continue
-            px = x0 + x * GW
-            out[py:py + GH, px:px + GW] = tile(ch if ch != "#" else " ", tuple(fg), tuple(bg))
+            px = x0 + x * CW
+            out[py:py + CH, px:px + CW] = tile(ch if ch != "#" else " ", tuple(fg), tuple(bg))
     return out
