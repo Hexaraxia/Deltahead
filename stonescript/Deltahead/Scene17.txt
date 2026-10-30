@@ -130,6 +130,7 @@ var uName = null
 var uNew = null
 var uSparks = []
 var uWear = []
+var uWearC = []          // each line's color
 var UNROLL = [3, 7, 11, 15, 18, 22, 26, 29]
 var U_FALL = 14          // the ∆ coming down
 var U_ON = 26            // on his head
@@ -137,6 +138,11 @@ var U_HOP = 44           // a hop
 var U_WEAR = 56          // the line to wear it
 var WEAR_LINE = "import Deltahead/Wear"
 var BOULDER_LINE = "import Deltahead/Boulder"
+var PAINT_VAR = "var boulder = import Deltahead/Boulder"
+// no # in it: anims and text both draw # as see-through
+var PAINT_LINE = ascii
+boulder.Paint("ff8800")
+asciiend
 var YOUTUBE_LINE = "import Deltahead/YoutubeThanks"
 var U_CLOSE = 236        // video only: the scroll rolls shut, then black
 var SCROLL_SIDE = ascii
@@ -696,8 +702,16 @@ func Build()
   for i = 0 .. 5
     uSparks.Add(MakeAnim(root, [["#000000", "·"]], OFF, 0))
   var wear = [wear0, line]
-  for i = 0 .. 1
-    uWear.Add(MakeAnim(root, [["#000000", wear[i]]], cx - string.Size(wear[i]) / 2, H / 2 + 10 + i))
+  var rows = [10, 11]
+  var cols = ["#a9a9a9", "#ffffff"]
+  // the boulder's also says how to pick its color
+  ?boulderTier >= 0
+    wear = [wear0, line, "or for a color of your own, these two lines instead:", PAINT_VAR, PAINT_LINE]
+    rows = [7, 8, 10, 11, 12]
+    cols = ["#a9a9a9", "#ffffff", "#a9a9a9", "#ffffff", "#ffffff"]
+  for i = 0 .. wear.Count() - 1
+    uWear.Add(MakeAnim(root, [["#000000", wear[i]]], cx - string.Size(wear[i]) / 2, H / 2 + rows[i]))
+    uWearC.Add(cols[i])
   for a : uRolls
     Show(a, false)
   for a : [uBody, uHead, uDelta, uName, uNew, bRock, bSlope, bBoulder, bPusher]
@@ -816,18 +830,15 @@ func Unlock()
     opt.See()
   Wear(u)
 
-// the import line under the scroll (fades out as the video's closes)
+// the import lines under the scroll (fade out as the video's closes)
 func Wear(u)
-  for i = 0 .. 1
+  for i = 0 .. uWear.Count() - 1
     var a = uWear[i]
     Show(a, u >= U_WEAR)
-    var c = "#a9a9a9"
-    ?i = 1
-      c = "#ffffff"
     var k = Prog(T_UNLOCK + U_WEAR, T_UNLOCK + U_WEAR + 25)
     ?opt.video
       k = k - Prog(T_UNLOCK + U_CLOSE, T_UNLOCK + U_CLOSE + 15)
-    a.color = color.Lerp("#000000", c, k)
+    a.color = color.Lerp("#000000", uWearC[i], k)
 
 // later watches: the Pusher rolling the boulder up the slope, then its name and line
 func Boulder(u, open)

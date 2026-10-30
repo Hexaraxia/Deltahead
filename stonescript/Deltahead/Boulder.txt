@@ -3,9 +3,10 @@
 // time to find it. it rolls along behind you, colored by the stage's difficulty
 // (white, cyan, yellow, green, like the game's stars). put this in your Mind Stone:
 //   import Deltahead/Boulder
-// to pick its color yourself (any #rrggbb, or #rainFF for rainbow), add these two under it:
+// or to pick its color, these two lines instead:
 //   var boulder = import Deltahead/Boulder
-//   boulder.color = "#ff8800"
+//   boulder.Paint("ff8800")
+// any hex color (the # is optional), a game color name like red or blue, or rainFF for rainbow
 //
 // drawn with >o as part of the hero
 
@@ -32,129 +33,140 @@ func Tier()
     return "#7fe3de"
   return "#ffffff"
 
-?opt.BoulderUnlocked() & !opt.filmOn
-  // trails a few cells behind, jumps straight there in a new place or if he's far off
-  target = pos.x - player.direction * 7
-  ?!placed | !string.Equals(loc.id, lastLoc) | math.Abs(target - bx) > 40
-    bx = target
-    placed = true
-    lastLoc = loc.id
-  step = (target - bx) * 0.15
-  bx = bx + step
-  roll = roll + step
-  k = math.FloorToInt(roll) % 8
-  ?k < 0
-    k = k + 8
-  c = color
-  ?string.Equals(c, "")
-    c = Tier()
-  // shaded side is down and right. rainbow can't be darkened
-  d = c
-  ?string.IndexOf(c, "#rain") ! 0
-    d = color.Lerp("#000000", c, 0.6)
-  ox = math.RoundToInt(bx - pos.x) - 3
-  // face ticks turn an eighth per cell rolled, clockwise when rolling right
-  ?k = 0
-    >o@ox@,0,@c@,ascii
+func Roll()
+  ?opt.BoulderUnlocked() & !opt.filmOn
+    // trails a few cells behind, jumps straight there in a new place or if he's far off
+    target = pos.x - player.direction * 7
+    ?!placed | !string.Equals(loc.id, lastLoc) | math.Abs(target - bx) > 40
+      bx = target
+      placed = true
+      lastLoc = loc.id
+    step = (target - bx) * 0.15
+    bx = bx + step
+    roll = roll + step
+    k = math.FloorToInt(roll) % 8
+    ?k < 0
+      k = k + 8
+    c = color
+    ?string.Equals(c, "")
+      c = Tier()
+    // shaded side is down and right. rainbow can't be darkened
+    d = c
+    ?string.IndexOf(c, "#rain") ! 0
+      d = color.Lerp("#000000", c, 0.6)
+    ox = math.RoundToInt(bx - pos.x) - 3
+    // face ticks turn an eighth per cell rolled, clockwise when rolling right
+    ?k = 0
+      >o@ox@,0,@c@,ascii
 #.-¯-.
 /    #\
 \´ ###/
 #`-_-´
 asciiend
-    >o@ox@,0,@d@,ascii
+      >o@ox@,0,@d@,ascii
 #######
 #####´
 ###.::
 #
 asciiend
-  :?k = 1
-    >o@ox@,0,@c@,ascii
+    :?k = 1
+      >o@ox@,0,@c@,ascii
 #.-¯-.
 /,   #\
 \  ###/
 #`-_-´
 asciiend
-    >o@ox@,0,@d@,ascii
+      >o@ox@,0,@d@,ascii
 #######
 #####,
 ###.::
 #
 asciiend
-  :?k = 2
-    >o@ox@,0,@c@,ascii
+    :?k = 2
+      >o@ox@,0,@c@,ascii
 #.-¯-.
 /    #\
 \, ###/
 #`-_-´
 asciiend
-    >o@ox@,0,@d@,ascii
+      >o@ox@,0,@d@,ascii
 #######
 #####:
 ###.:,
 #
 asciiend
-  :?k = 3
-    >o@ox@,0,@c@,ascii
+    :?k = 3
+      >o@ox@,0,@c@,ascii
 #.-¯-.
 /   ´#\
 \  ###/
 #`-_-´
 asciiend
-    >o@ox@,0,@d@,ascii
+      >o@ox@,0,@d@,ascii
 #######
 #####:
 ###.:,
 #
 asciiend
-  :?k = 4
-    >o@ox@,0,@c@,ascii
+    :?k = 4
+      >o@ox@,0,@c@,ascii
 #.-¯-.
 /    #\
 \, ###/
 #`-_-´
 asciiend
-    >o@ox@,0,@d@,ascii
+      >o@ox@,0,@d@,ascii
 #######
 #####,
 ###.::
 #
 asciiend
-  :?k = 5
-    >o@ox@,0,@c@,ascii
+    :?k = 5
+      >o@ox@,0,@c@,ascii
 #.-¯-.
 /    #\
 \´ ###/
 #`-_-´
 asciiend
-    >o@ox@,0,@d@,ascii
+      >o@ox@,0,@d@,ascii
 #######
 #####:
 ###.:,
 #
 asciiend
-  :?k = 6
-    >o@ox@,0,@c@,ascii
+    :?k = 6
+      >o@ox@,0,@c@,ascii
 #.-¯-.
 /´   #\
 \  ###/
 #`-_-´
 asciiend
-    >o@ox@,0,@d@,ascii
+      >o@ox@,0,@d@,ascii
 #######
 #####´
 ###.::
 #
 asciiend
-  :?k = 7
-    >o@ox@,0,@c@,ascii
+    :?k = 7
+      >o@ox@,0,@c@,ascii
 #.-¯-.
 /´   #\
 \ ,###/
 #`-_-´
 asciiend
-    >o@ox@,0,@d@,ascii
+      >o@ox@,0,@d@,ascii
 #######
 #####:
 ###.::
 #
 asciiend
+
+// a var import only runs once, so Paint rolls it along every frame as well as setting the color
+func Paint(col)
+  color = col
+  // the # is optional, since the scroll can't show one
+  ?!string.Equals(color, "") & string.IndexOf(color, "#") ! 0
+    color = "#" + color
+  Roll()
+
+Roll()
