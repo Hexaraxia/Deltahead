@@ -8,8 +8,8 @@ Deadwood waterfall and runs about 13 minutes, with sound.
 
 You need the PC version of the game.
 
-1. Download this repo as a ZIP and unzip it
-2. Copy the "stonescript/Deltahead" folder into the game's Stonescript folder
+1. Download "Deltahead.zip" from the releases page
+2. Unzip it into the game's Stonescript folder
    ("%USERPROFILE%\AppData\LocalLow\Martian Rex, Inc_\Stone Story\<your id>\Stonescript"), so you end up with
    "...\Stonescript\Deltahead\Main.txt"
 
@@ -45,7 +45,7 @@ NOTE: put each import on its own line with nothing after it (not even a comment)
 
 This is a fan project. Stone Story RPG and its music, sounds and art belong to their creators.
 
-The "stonescript/tools" folder has the Python scripts I used to build the scenes' art and preview them. You don't need
-them to watch.
+The "stonescript/tools" folder here in the repo has the Python scripts I used to build the scenes' art and preview them.
+You don't need them to watch.
 
 If something doesn't work, lmk in the issues
