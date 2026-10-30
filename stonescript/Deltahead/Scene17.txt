@@ -602,12 +602,13 @@ func Build()
   for i = 0 .. ST_SEED.Count() - 1
     streaks.Add(MakeAnim(shotA, a17.streak, 0, 0))
   hero = MakeAnim(shotA, a17.hero, 0, 0)
+  // the ∆'s own glows go under it, so they light what's around it and leave its rainbow alone
+  for k = 0 .. 7
+    headGlows.Add(QueueHalo(shotA, 13, 5, HUE_R[k] * 5 / 4, HUE_G[k] * 5 / 4, HUE_B[k] * 5 / 4, 0.16))
   head = MakeAnim(shotA, [[DELTA_C, "∆"]], 0, 0)
   burst = MakeAnim(shotA, s8.burst, 0, 0)
   for i = 0 .. 2
     beamGlow.Add(QueueHalo(shotA, 19, 27, 50, 124, 78, 0.16))
-  for k = 0 .. 7
-    headGlows.Add(QueueHalo(shotA, 13, 5, HUE_R[k] * 5 / 4, HUE_G[k] * 5 / 4, HUE_B[k] * 5 / 4, 0.16))
   onHim = QueueHalo(shotA, 15, 9, 110, 104, 80, 0.14)
   shotCf = Shot()
   bankFront = MakeAnim(shotCf, a17.bankFront, 0, 0)

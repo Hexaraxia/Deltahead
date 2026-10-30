@@ -333,6 +333,11 @@ func Build()
   bridgeB = MakeAnim(art.bridgeB, 0, 0)
   for i = 0 .. art.flagX.Count() - 1
     flags.Add(MakeAnim(art.flag, 0, 0))
+  // the ∆'s own glows go under it, so they light what's around it and leave its rainbow alone
+  for k = 0 .. 7
+    headGlows.Add(QueueHalo(13, 5, HUE_R[k] * 5 / 4, HUE_G[k] * 5 / 4, HUE_B[k] * 5 / 4, 0.16))
+  for k = 0 .. 7
+    chestGlows.Add(QueueHalo(15, 7, HUE_R[k], HUE_G[k], HUE_B[k], 0.14))
   medal = MakeAnim([[DELTA_C, "∆"]], 0, 0)
   hero = MakeAnim(art.hero, 0, 0)
   head = MakeAnim([[DELTA_C, "∆"]], 0, 0)
@@ -372,10 +377,9 @@ func Build()
   flare = QueueHalo(31, 27, 70, 150, 100, 0.2)
   for i = 0 .. art.lampX.Count() - 1
     lampGlow.Add(QueueHalo(15, 7, 140, 96, 38, 0.16))
-  for k = 0 .. 7
-    headGlows.Add(QueueHalo(13, 5, HUE_R[k] * 5 / 4, HUE_G[k] * 5 / 4, HUE_B[k] * 5 / 4, 0.16))
-  for k = 0 .. 7
-    chestGlows.Add(QueueHalo(15, 7, HUE_R[k], HUE_G[k], HUE_B[k], 0.14))
+  // the Delta and the medallion go over the Stream's light, keeping their rainbow
+  root.Add(delta)
+  root.Add(medal)
 
   shade = Tiles("multiply", 0, H)
   vig = look.Vignette(root, W, H, 0.35)

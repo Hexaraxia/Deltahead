@@ -285,6 +285,11 @@ func Build()
   crevasse = MakeAnim(crev.crevasse, 0, 0)
   // moonlight catching the snow
   glints = snowLight.Make(root, 6)
+  // the ∆'s own glows go under it, so they light what's around it and leave its rainbow alone
+  for k = 0 .. 7
+    chestGlows.Add(QueueHalo(29, 9, HUE_R[k] * 3 / 2, HUE_G[k] * 3 / 2, HUE_B[k] * 3 / 2, 0.18))
+  for k = 0 .. 7
+    headGlows.Add(QueueHalo(13, 5, HUE_R[k] * 5 / 4, HUE_G[k] * 5 / 4, HUE_B[k] * 5 / 4, 0.16))
   chest = MakeAnim(art.chest, 0, 0)
   // behind him till he picks it up, then in front
   itemB = MakeAnim(art.item, 0, 0)
@@ -306,10 +311,6 @@ func Build()
   near = MakeAnim(s7.near, 0, 0)
   auroraGlow = QueueHalo(80, 14, 14, 52, 22, 0.25)
   moonGlow = QueueHalo(31, 13, 40, 46, 58, 0.12)
-  for k = 0 .. 7
-    chestGlows.Add(QueueHalo(29, 9, HUE_R[k] * 3 / 2, HUE_G[k] * 3 / 2, HUE_B[k] * 3 / 2, 0.18))
-  for k = 0 .. 7
-    headGlows.Add(QueueHalo(13, 5, HUE_R[k] * 5 / 4, HUE_G[k] * 5 / 4, HUE_B[k] * 5 / 4, 0.16))
 
   shade = Tiles("multiply", 0, H)
   vig = look.Vignette(root, W, H, 0.35)
