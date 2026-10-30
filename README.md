@@ -48,4 +48,4 @@ This is a fan project. Stone Story RPG and its music, sounds and art belong to t
 The "stonescript/tools" folder here in the repo has the Python scripts I used to build the scenes' art and preview them.
 You don't need them to watch.
 
-If something doesn't work, lmk in the issues
+Contact me on Discord (Hexaraxia) for any issues
